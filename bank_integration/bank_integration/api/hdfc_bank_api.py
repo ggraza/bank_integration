@@ -6,7 +6,6 @@ import time
 
 import frappe
 import hashlib
-import pandas as pd
 from frappe.utils import getdate, today, add_months, add_days, flt
 from frappe.utils.file_manager import save_file
 
@@ -509,6 +508,8 @@ class HDFCBankAPI(BankAPI):
         self.logout()
 
     def fetch_transactions(self, from_date=None):
+        import pandas as pd
+
         def update_transactions(transactions, after_date, bank_account):
             trans_ids = frappe.get_all(
                 "Bank Transaction",
