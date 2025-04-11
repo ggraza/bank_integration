@@ -508,8 +508,6 @@ class HDFCBankAPI(BankAPI):
         self.logout()
 
     def fetch_transactions(self, from_date=None):
-        import pandas as pd
-
         def update_transactions(transactions, after_date, bank_account):
             trans_ids = frappe.get_all(
                 "Bank Transaction",
@@ -617,7 +615,6 @@ class HDFCBankAPI(BankAPI):
         )
         self.br.execute_script("return formSubmitbytype()")
 
-        transactions = []
         self.br.execute_script("$('.datatable').show()")
         transaction_tables = self.br.find_elements_by_class_name("datatable")
 
@@ -626,15 +623,44 @@ class HDFCBankAPI(BankAPI):
             self.logout()
             return
 
-        for transaction_table in transaction_tables:
-            transactions += pd.read_html(transaction_table.get_attribute("outerHTML"))
+        transactions = _get_transactions(transaction_tables)
 
         self.logout()
 
-        transactions = pd.concat(transactions)
-        transactions = transactions.where(pd.notnull(transactions), None)
-        transactions.fillna(0, inplace=True)
-        transactions = transactions.to_dict("records")
-        transactions.reverse()
-
         update_transactions(transactions, from_date, self.data.bank_account)
+
+
+def _get_transactions(transaction_tables):
+    from bs4 import BeautifulSoup
+
+    transactions = []
+
+    for table_element in transaction_tables:
+        soup = BeautifulSoup(table_element.get_attribute("outerHTML"), "lxml")
+        table = soup.find("table")
+
+        if not table:
+            continue
+
+        rows = table.find_all("tr")
+        if not rows:
+            continue
+        # First row is header
+        headers = [th.text.strip() for th in rows[0].find_all("th")]
+
+        # Remaining rows are data
+        for row in rows[1:]:
+            cells = row.find_all("td")
+
+            # NOTE: Will not happen right?
+            if len(cells) != len(headers):
+                continue  # Skip incomplete rows
+
+            transaction = {
+                header: (cell.text.strip() or 0) for header, cell in zip(headers, cells)
+            }
+
+            transactions.append(transaction)
+
+    transactions.reverse()  # To maintain chronological order
+    return transactions
