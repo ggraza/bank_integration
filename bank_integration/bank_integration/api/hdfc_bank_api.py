@@ -406,7 +406,7 @@ class HDFCBankAPI(BankAPI):
 
     def logout(self):
         if self.logged_in:
-            self.br.switch_to.default_content()
+            # self.br.switch_to.default_content()
             logout_btn1 = self.br.find_element(
                 By.CSS_SELECTOR,
                 'div.logout-icon-container[aria-label="Logout"][role="button"]',
@@ -454,10 +454,189 @@ class HDFCBankAPI(BankAPI):
         )
         option.click()
 
+        # After selecting the to-account, handle from-account selection
+        # if the user has child/parent accounts.
+        self._select_from_account_if_needed()
+
         if self.data.transfer_type == "Transfer within the bank":
             self.make_payment_within_bank()
         elif self.data.transfer_type == "Transfer to other bank (NEFT)":
             self.make_neft_payment()
+
+    def _select_from_account_if_needed(self):
+        """
+        After the to-account is selected, HDFC may show an ng-select dropdown
+        for the from-account if the user has child/parent accounts.
+        If there is only one account (no child/parent), the website auto-sets
+        the from-account and no dropdown appears.
+
+        The dropdown has NO search input — it renders a flat list of
+        div.ng-option elements each containing a
+        bb-custom-product-item-basic-account-ui component.  Account numbers
+        are masked (e.g. "**** **** **26 18"), so we match using the last 4
+        digits of self.data.from_account.
+        """
+        time.sleep(1)  # Allow Angular to render the from-account section
+
+        # Check if the from-account ng-select dropdown is present on the page
+        from_account_selectors = self.br.find_elements(
+            By.CSS_SELECTOR, 'ng-select[name="bb-custom-account-selector"]'
+        )
+
+        if not from_account_selectors:
+            # No from-account selector found — website auto-set the account
+            return
+
+        from_account_select = from_account_selectors[0]
+
+        # Check if an account is already auto-selected by looking for the
+        # ng-value element (present when a value is chosen).  If the
+        # placeholder "Select an A/c" is visible instead, we need to select.
+        already_selected = from_account_select.find_elements(
+            By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
+        )
+        if already_selected:
+            # Verify the already-selected account contains our last-4 digits
+            selected_text = already_selected[0].text or ""
+            last4 = self.data.from_account.strip().replace(" ", "")[-4:]
+            if last4 and last4[-2:] in selected_text:
+                return
+            # Wrong account pre-selected — fall through to re-select
+
+        self.show_msg("Selecting from account...")
+
+        # Extract the last 4 digits from the full account number for matching.
+        # HDFC masks the number as "**** **** **XX YY" where XXYY are the
+        # last 4 digits of the real account number, shown as two pairs
+        # separated by a space (e.g. account 50200012342618 → "26 18").
+        account_stripped = self.data.from_account.strip().replace(" ", "")
+        last4 = account_stripped[-4:]  # e.g. "2618"
+        last4_spaced = last4[-4:-2] + " " + last4[-2:]  # e.g. "26 18"
+
+        # Click the ng-select container to open the dropdown panel
+        try:
+            select_container = from_account_select.find_element(
+                By.CSS_SELECTOR, "div.ng-select-container"
+            )
+            select_container.click()
+        except Exception:
+            self.br.execute_script("arguments[0].click();", from_account_select)
+
+        # Wait for the dropdown options to appear
+        wait = WebDriverWait(self.br, 10)
+        try:
+            wait.until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option")
+                )
+            )
+        except TimeoutException:
+            self.throw(
+                "From account selector appeared but the dropdown did not open. "
+                "Please check if the HDFC portal layout has changed.",
+                screenshot=True,
+            )
+
+        time.sleep(0.5)  # Let Angular finish rendering all options
+
+        # Collect all option elements from the dropdown
+        dropdown_options = self.br.find_elements(
+            By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option"
+        )
+
+        if not dropdown_options:
+            self.throw(
+                "From account dropdown opened but contains no options.",
+                screenshot=True,
+            )
+
+        # ── Match and click ──────────────────────────────────────────────
+        # The visible text for each option looks like:
+        #   "Savings A/C  **** **** **26 18\nSMIT NALIN VORA\nAvailable Balance ₹1,91,030.64"
+        # We match against the last4 digits in both spaced ("26 18") and
+        # unspaced ("2618") forms, plus also try the full account number
+        # in case the portal shows it unmasked for some users.
+        option_found = False
+
+        for opt in dropdown_options:
+            opt_text = opt.text or ""
+            # Also grab the inner HTML in case visible text is incomplete
+            opt_html = opt.get_attribute("innerHTML") or ""
+
+            if (
+                last4_spaced in opt_text
+                or last4 in opt_text.replace(" ", "")
+                or self.data.from_account in opt_text
+                or last4_spaced in opt_html
+                or last4 in opt_html.replace(" ", "")
+            ):
+                # Prefer a normal Selenium click on the div.ng-option
+                try:
+                    opt.click()
+                except Exception:
+                    self.br.execute_script("arguments[0].click();", opt)
+                option_found = True
+                break
+
+        # Fallback: pure JS walk (covers edge cases where Selenium
+        # find_elements returned stale references after Angular re-render)
+        if not option_found:
+            try:
+                clicked = self.br.execute_script(
+                    """
+                    var options = document.querySelectorAll(
+                        'ng-dropdown-panel div.ng-option'
+                    );
+                    var last4Spaced = arguments[0];
+                    var last4       = arguments[1];
+                    var fullAcct    = arguments[2];
+                    for (var i = 0; i < options.length; i++) {
+                        var txt  = options[i].textContent || '';
+                        var html = options[i].innerHTML   || '';
+                        if (
+                            txt.indexOf(last4Spaced) !== -1 ||
+                            txt.replace(/ /g, '').indexOf(last4) !== -1 ||
+                            txt.indexOf(fullAcct) !== -1 ||
+                            html.indexOf(last4Spaced) !== -1 ||
+                            html.replace(/ /g, '').indexOf(last4) !== -1
+                        ) {
+                            options[i].click();
+                            return true;
+                        }
+                    }
+                    return false;
+                """,
+                    last4_spaced,
+                    last4,
+                    self.data.from_account,
+                )
+                if clicked:
+                    option_found = True
+            except Exception:
+                pass
+
+        if not option_found:
+            self.throw(
+                "Could not find from-account ending in '{}' in the account selector "
+                "dropdown. Please verify the account number in Bank Integration "
+                "Settings.".format(last4_spaced),
+                screenshot=True,
+            )
+
+        # Wait briefly for Angular to process the selection
+        time.sleep(1)
+
+        # Verify the selection stuck — the ng-value should now be present
+        # and the placeholder "Select an A/c" should be gone.
+        selected_values = from_account_select.find_elements(
+            By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
+        )
+        if not selected_values:
+            self.throw(
+                "From account selection did not register. "
+                "The dropdown may have closed without selecting an account.",
+                screenshot=True,
+            )
 
     def make_payment_within_bank(self):
         # self.br.execute_script("return formSubmit_new('TPT');")
@@ -802,13 +981,12 @@ class HDFCBankAPI(BankAPI):
             except Exception:
                 pass
         else:
-            # Fallback for old NEFT UI (Reference Number in <td>)
-            # if ref_no == "-" and self.data.transfer_type == "Transfer to other bank (NEFT)":
             try:
                 ref_no = (
                     self.get_element(
-                        '//div[contains(@class,"bb-support--sub-title") and normalize-space(text())="Reference ID"]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
+                        '//div[contains(@class,"bb-support--subtitle") and contains(normalize-space(text()),"Reference")]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
                         "xpath",
+                        throw=False,
                     ).text
                     or "-"
                 ).strip()

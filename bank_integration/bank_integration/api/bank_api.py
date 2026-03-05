@@ -59,7 +59,7 @@ class BankAPI:
         # sentinel object to float. Set an explicit timeout to avoid the error.
         from selenium.webdriver.remote.remote_connection import RemoteConnection
         if not isinstance(RemoteConnection._timeout, (int, float)) and RemoteConnection._timeout is not None:
-            RemoteConnection.set_timeout(60)
+            RemoteConnection.set_timeout(90)
         self.br = webdriver.Chrome(options=self.get_options())
 
     def get_options(self):
@@ -74,7 +74,7 @@ class BankAPI:
             "Chrome/121.0.0.0 Safari/537.36"
         )
 
-        if not frappe.conf.developer_mode:
+        if frappe.conf.developer_mode:
             # Use the modern headless mode (Chrome 112+) for a proper
             # rendering pipeline instead of the legacy --headless flag.
             options.add_argument("--headless=new")
