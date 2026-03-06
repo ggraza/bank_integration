@@ -36,55 +36,8 @@ class HDFCBankAPI(BankAPI):
         cust_id = self.get_element("fldLoginUserId")
         cust_id.send_keys(self.username, Keys.ENTER)
 
-        # After submitting the customer ID, HDFC removes all iframes and renders
-        # the password screen directly in the main document. Switch back out.
         self.br.switch_to.default_content()
         pass_input = self.get_element("password", "id")
-        # try:
-        #     secure_access_cb = self.get_element(
-        #         "chkrsastu", "id", timeout=2, throw=False
-        #     )
-        #     secure_access_cb.click()
-        # except TimeoutException:
-        #     pass
-
-        # try:
-        #     self.get_element("fldCaptcha", timeout=1, throw=False)
-        # except TimeoutException:
-        #     pass
-        # else:
-        #     self.throw(
-        #         "HDFC Netbanking is asking for a CAPTCHA, which we don't currently support. Exiting."
-        #     )
-
-        # Inject a MutationObserver BEFORE pressing Enter so that any
-        # element appearing transiently during Angular's page transition
-        # (e.g. OTP screen visible for < 500ms) is still recorded even
-        # if Selenium's 500ms poll cycle misses it entirely.
-        # Watches both DOM additions AND style/class attribute changes so
-        # it only records an element when it is actually visible on screen.
-        self.br.execute_script("""
-            window._hdfcSeenIds = new Set();
-            function checkVisible(id) {
-                var el = document.getElementById(id);
-                if (el) {
-                    var s = window.getComputedStyle(el);
-                    if (s.display !== 'none' && s.visibility !== 'hidden' && s.opacity !== '0') {
-                        window._hdfcSeenIds.add(id);
-                    }
-                }
-            }
-            var obs = new MutationObserver(function() {
-                ['mfa-get-otp-btn', 'proceedBtn'].forEach(checkVisible);
-            });
-            obs.observe(document.documentElement, {
-                childList: true,
-                subtree: true,
-                attributes: true,
-                attributeFilter: ['style', 'class', 'hidden']
-            });
-            window._hdfcObserver = obs;
-        """)
 
         pass_input.send_keys(self.password, Keys.ENTER)
 
@@ -104,15 +57,6 @@ class HDFCBankAPI(BankAPI):
         We loop up to 3 times so we can dismiss up to 2 proceed dialogs before
         reaching the final state.
         """
-        # Stop the observer and retrieve which element ids were seen
-        # transiently during Angular's page transition after password submit.
-        seen_transiently = set(
-            self.br.execute_script("""
-            if (window._hdfcObserver) { window._hdfcObserver.disconnect(); }
-            return window._hdfcSeenIds ? Array.from(window._hdfcSeenIds) : [];
-        """)
-            or []
-        )
 
         for _ in range(3):
             self.wait_until(
@@ -123,13 +67,8 @@ class HDFCBankAPI(BankAPI):
                             "//td/span[text()[contains(.,'The Customer ID/IPIN (Password) is invalid.')]]",
                         )
                     ),
-                    # EC.visibility_of_element_located((By.NAME, "fldOldPass")),
                     EC.visibility_of_element_located((By.ID, "proceedBtn")),
-                    # visibility_of_element_located is correct here — only fires
-                    # when truly visible. Transient appearances missed by the
-                    # 500ms poll are caught by the MutationObserver above.
                     EC.visibility_of_element_located((By.ID, "mfa-get-otp-btn")),
-                    # EC.visibility_of_element_located((By.NAME, "fldAnswer")),
                     EC.presence_of_element_located((By.TAG_NAME, "bb-retail-layout")),
                 ),
                 throw="ignore",
@@ -137,16 +76,10 @@ class HDFCBankAPI(BankAPI):
             found = self.br._found_element
 
             if not found:
-                # wait_until timed out — check if the observer recorded any
-                # transient states that the poll cycle may have missed.
-                if "mfa-get-otp-btn" in seen_transiently and self.br.find_elements(
-                    By.ID, "mfa-get-otp-btn"
-                ):
+                if self.br.find_elements(By.ID, "mfa-get-otp-btn"):
                     self.process_otp()
                     return
-                if "proceedBtn" in seen_transiently and self.br.find_elements(
-                    By.ID, "proceedBtn"
-                ):
+                if self.br.find_elements(By.ID, "proceedBtn"):
                     self.br.find_element(By.ID, "proceedBtn").click()
                     continue
                 self.handle_login_error()
@@ -166,22 +99,14 @@ class HDFCBankAPI(BankAPI):
                 )
 
             elif last == "proceedBtn":
-                # "Already logged in" dialog — click Proceed and loop to
-                # detect what screen comes next.
                 self.get_element("proceedBtn", "id", now=True).click()
                 continue
-
-            elif last == "mfa-get-otp-btn":
-                self.process_otp()
-                return
 
             elif last == "fldAnswer":
                 self.process_security_questions()
                 return
 
             elif last == "bb-retail-layout":
-                # bb-retail-layout is the Angular app shell — it may be present
-                # on the OTP screen too. Check explicitly before declaring success.
                 if self.br.find_elements(By.ID, "mfa-get-otp-btn"):
                     self.process_otp()
                 else:
@@ -189,15 +114,12 @@ class HDFCBankAPI(BankAPI):
                 return
 
             else:
-                # Unknown state
                 self.handle_login_error()
                 return
 
-        # Looped 3 times without reaching a terminal state
         self.handle_login_error()
 
     def process_otp(self):
-        mobile_no = email_id = None
 
         try:
             self.wait_until(
@@ -208,9 +130,6 @@ class HDFCBankAPI(BankAPI):
                             '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
                         )
                     ),
-                    # mfa-get-otp-btn is kept display:none by Angular — it exists in the
-                    # DOM immediately but is never visible, so presence_of_element_located
-                    # must be used here instead of visibility_of_element_located.
                     EC.presence_of_element_located((By.ID, "mfa-get-otp-btn")),
                 ),
                 throw=False,
@@ -226,13 +145,6 @@ class HDFCBankAPI(BankAPI):
             == self.br._found_element[-1]
         ):
             try:
-                # Click the label wrapping the "SMS + email" radio option.
-                # The <input type="radio"> is visually hidden (::before pseudo-element
-                # renders the circle), so clicking the <input> directly has no effect.
-                # Clicking the <label data-role="radio-group-option"> that wraps it
-                # is the correct trigger for Angular's radio-group component.
-                # We target the label whose child span contains both "SMS" and "email"
-                # to select the combined SMS+email OTP channel.
                 email_mobile_otp_label = self.get_element(
                     '//label[@data-role="radio-group-option"][.//span[contains(text(),"SMS") and contains(text(),"email")]]',
                     "xpath",
@@ -255,39 +167,18 @@ class HDFCBankAPI(BankAPI):
             otp_btn = self.get_element("mfa-get-otp-btn", "id", now=True)
             self.br.execute_script("arguments[0].click();", otp_btn)
 
-        # Button exists in DOM but display:none (Angular) — use JS click
-        # otp_btn = self.get_element("mfa-get-otp-btn", "id", now=True)
-        # self.br.execute_script("arguments[0].click();", otp_btn)
-
-        ## till here the workflow is working. cleaning needs to be done.
-
-        # try:
-        #     mobile_no = self.get_element(
-        #         '//*[@name="fldMobile"]/../following-sibling::td[last()]',
-        #         "xpath",
-        #         now=True,
-        #         throw=False,
-        #     ).text
-        # except NoSuchElementException:
-        #     pass
-
-        # try:
-        #     self.get_element("fldEmailid", now=True, throw=False).click()
-        #     email_id = self.get_element(
-        #         '//*[@name="fldEmailid"]/../following-sibling::td[last()]',
-        #         "xpath",
-        #         now=True,
-        #         throw=False,
-        #     ).text
-        # except NoSuchElementException:
-        #     pass
         self.br.switch_to.default_content()
         input_msg = ""
-        try:
-            input_msg = self.get_element('label[for="otpValue"]', "css_selector").text
-        except Exception:
-            pass
-        # self.br.execute_script("return fireOtp();")
+        if (
+            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
+            == self.br._found_element[-1]
+        ):
+            try:
+                input_msg = self.get_element(
+                    'label[for="otpValue"]', "css_selector"
+                ).text
+            except Exception:
+                pass
 
         frappe.publish_realtime(
             "get_bank_otp",
@@ -360,7 +251,6 @@ class HDFCBankAPI(BankAPI):
             "xpath",
         )
         submit_btn.click()
-        # self.br.execute_script("return authOtp();")
 
     def submit_answers(self, answers):
         field_map = self.get_question_map(True)
@@ -406,7 +296,6 @@ class HDFCBankAPI(BankAPI):
 
     def logout(self):
         if self.logged_in:
-            # self.br.switch_to.default_content()
             logout_btn1 = self.br.find_element(
                 By.CSS_SELECTOR,
                 'div.logout-icon-container[aria-label="Logout"][role="button"]',
@@ -425,12 +314,6 @@ class HDFCBankAPI(BankAPI):
 
     def make_payment(self):
         self.br.switch_to.default_content()
-
-        # Use a JS click on the Angular routerlink anchor instead of self.br.get()
-        # or a normal Selenium click. self.br.get() causes a full page reload which
-        # HDFC detects and terminates the session. A JS click fires the Angular
-        # router internally without any HTTP navigation, and works regardless of
-        # whether the element is visible or the navbar is collapsed.
         clicked = self.br.execute_script("""
             var el = document.querySelector("a[routerlink='/transfers/send-money']");
             if (el) { el.click(); return true; }
@@ -454,8 +337,6 @@ class HDFCBankAPI(BankAPI):
         )
         option.click()
 
-        # After selecting the to-account, handle from-account selection
-        # if the user has child/parent accounts.
         self._select_from_account_if_needed()
 
         if self.data.transfer_type == "Transfer within the bank":
@@ -476,44 +357,32 @@ class HDFCBankAPI(BankAPI):
         are masked (e.g. "**** **** **26 18"), so we match using the last 4
         digits of self.data.from_account.
         """
-        time.sleep(1)  # Allow Angular to render the from-account section
+        time.sleep(1)  
 
-        # Check if the from-account ng-select dropdown is present on the page
         from_account_selectors = self.br.find_elements(
             By.CSS_SELECTOR, 'ng-select[name="bb-custom-account-selector"]'
         )
 
         if not from_account_selectors:
-            # No from-account selector found — website auto-set the account
             return
 
         from_account_select = from_account_selectors[0]
 
-        # Check if an account is already auto-selected by looking for the
-        # ng-value element (present when a value is chosen).  If the
-        # placeholder "Select an A/c" is visible instead, we need to select.
         already_selected = from_account_select.find_elements(
             By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
         )
         if already_selected:
-            # Verify the already-selected account contains our last-4 digits
             selected_text = already_selected[0].text or ""
             last4 = self.data.from_account.strip().replace(" ", "")[-4:]
             if last4 and last4[-2:] in selected_text:
                 return
-            # Wrong account pre-selected — fall through to re-select
 
         self.show_msg("Selecting from account...")
 
-        # Extract the last 4 digits from the full account number for matching.
-        # HDFC masks the number as "**** **** **XX YY" where XXYY are the
-        # last 4 digits of the real account number, shown as two pairs
-        # separated by a space (e.g. account 50200012342618 → "26 18").
         account_stripped = self.data.from_account.strip().replace(" ", "")
-        last4 = account_stripped[-4:]  # e.g. "2618"
-        last4_spaced = last4[-4:-2] + " " + last4[-2:]  # e.g. "26 18"
+        last4 = account_stripped[-4:] 
+        last4_spaced = last4[-4:-2] + " " + last4[-2:]  
 
-        # Click the ng-select container to open the dropdown panel
         try:
             select_container = from_account_select.find_element(
                 By.CSS_SELECTOR, "div.ng-select-container"
@@ -522,7 +391,6 @@ class HDFCBankAPI(BankAPI):
         except Exception:
             self.br.execute_script("arguments[0].click();", from_account_select)
 
-        # Wait for the dropdown options to appear
         wait = WebDriverWait(self.br, 10)
         try:
             wait.until(
@@ -537,9 +405,8 @@ class HDFCBankAPI(BankAPI):
                 screenshot=True,
             )
 
-        time.sleep(0.5)  # Let Angular finish rendering all options
+        time.sleep(0.5)  
 
-        # Collect all option elements from the dropdown
         dropdown_options = self.br.find_elements(
             By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option"
         )
@@ -550,17 +417,10 @@ class HDFCBankAPI(BankAPI):
                 screenshot=True,
             )
 
-        # ── Match and click ──────────────────────────────────────────────
-        # The visible text for each option looks like:
-        #   "Savings A/C  **** **** **26 18\nSMIT NALIN VORA\nAvailable Balance ₹1,91,030.64"
-        # We match against the last4 digits in both spaced ("26 18") and
-        # unspaced ("2618") forms, plus also try the full account number
-        # in case the portal shows it unmasked for some users.
         option_found = False
 
         for opt in dropdown_options:
             opt_text = opt.text or ""
-            # Also grab the inner HTML in case visible text is incomplete
             opt_html = opt.get_attribute("innerHTML") or ""
 
             if (
@@ -570,7 +430,6 @@ class HDFCBankAPI(BankAPI):
                 or last4_spaced in opt_html
                 or last4 in opt_html.replace(" ", "")
             ):
-                # Prefer a normal Selenium click on the div.ng-option
                 try:
                     opt.click()
                 except Exception:
@@ -578,8 +437,6 @@ class HDFCBankAPI(BankAPI):
                 option_found = True
                 break
 
-        # Fallback: pure JS walk (covers edge cases where Selenium
-        # find_elements returned stale references after Angular re-render)
         if not option_found:
             try:
                 clicked = self.br.execute_script(
@@ -623,11 +480,8 @@ class HDFCBankAPI(BankAPI):
                 screenshot=True,
             )
 
-        # Wait briefly for Angular to process the selection
         time.sleep(1)
 
-        # Verify the selection stuck — the ng-value should now be present
-        # and the placeholder "Select an A/c" should be gone.
         selected_values = from_account_select.find_elements(
             By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
         )
@@ -639,71 +493,39 @@ class HDFCBankAPI(BankAPI):
             )
 
     def make_payment_within_bank(self):
-        # self.br.execute_script("return formSubmit_new('TPT');")
-
-        # self.switch_to_frame("main_part")
-        # self.get_element("selectselAcct0", "id")
-
-        # # from account
-        # from_account = self.get_element("selAcct", now=True)
-        # self.click_option(
-        #     from_account,
-        #     self.data.from_account,
-        #     "The account number you entered in Bank Integration Settings could not be found in NetBanking",
-        # )
-
-        # to account
-        # beneficiary = self.get_element("fldToAcct", now=True)
-        # self.click_option(
-        #     beneficiary,
-        #     self.data.to_account,
-        #     "Unable to find a beneficiary associated with the party's account number",
-        # )
-        # amount
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
         amt.send_keys("%.2f" % self.data.amount)
 
-        # description - target the actual input inside the cb-input-text-ui wrapper
-        # desc = self.get_element("cb-input-text-ui#note input", "css_selector", now=True)
         desc = self.get_element('input[data-role="input"]', "css_selector")
         desc.clear()
         desc.send_keys(self.data.payment_desc)
 
-        # continue
         continue_btn = self.get_element(
             'button[type="submit"].btn-primary.btn.btn-md.btn-block',
             "css_selector",
             now=True,
         )
-        self.br.execute_script("arguments[0].scrollIntoView({block: 'center'});", continue_btn)
+        self.br.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", continue_btn
+        )
         try:
             continue_btn.click()
         except Exception:
             self.br.execute_script("arguments[0].click();", continue_btn)
 
-        # Terms & conditions checkbox
         checkbox_label = self.get_element(
             'span.bb-input-checkbox__content[data-role="checkbox-label"]',
             "css_selector",
         )
         checkbox_label.click()
 
-        # Confirm
         confirm_btn = self.get_element(
             'button.confirm-btn[aria-label="Confirm Transfer"]',
             "css_selector",
         )
         confirm_btn.click()
-        # self.switch_to_frame("main_part")
         self.br.switch_to.default_content()
-
-        # self.br.execute_script("return issue_click();")
-
-        # self.switch_to_frame("main_part")
-
-        # get_otp_btn = self.get_element("", "xpath", now=True)
-        # get_otp_btn.click()
 
         try:
             self.wait_until(
@@ -738,18 +560,14 @@ class HDFCBankAPI(BankAPI):
             self.payment_success()
 
     def make_neft_payment(self):
-        # self.br.execute_script("return formSubmit_new('NEFT');")
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
         amt.send_keys("%.2f" % self.data.amount)
 
-        # description - target the actual input inside the cb-input-text-ui wrapper
-        # desc = self.get_element("cb-input-text-ui#note input", "css_selector", now=True)
         desc = self.get_element('input[data-role="input"]', "css_selector")
         desc.clear()
         desc.send_keys(self.data.payment_desc)
 
-        # continue
         continue_btn = self.get_element(
             'button[type="submit"][aria-label="Continue transfer"]',
             "css_selector",
@@ -763,20 +581,17 @@ class HDFCBankAPI(BankAPI):
         except Exception:
             self.br.execute_script("arguments[0].click();", continue_btn)
 
-        # Terms & conditions checkbox
         checkbox_label = self.get_element(
             'span.bb-input-checkbox__content[data-role="checkbox-label"]',
             "css_selector",
         )
         checkbox_label.click()
 
-        # Confirm
         confirm_btn = self.get_element(
             'button.confirm-btn[aria-label="Confirm Transfer"]',
             "css_selector",
         )
         confirm_btn.click()
-        # self.switch_to_frame("main_part")
         self.br.switch_to.default_content()
 
         try:
@@ -806,104 +621,6 @@ class HDFCBankAPI(BankAPI):
             == self.br._found_element[-1]
         ):
             self.process_otp()
-
-        # self.switch_to_frame("main_part")
-        # self.get_element("selectselAcct0", "id")
-
-        # # from account
-        # from_account = self.get_element("selAcct", now=True)
-        # self.click_option(
-        #     from_account,
-        #     self.data.from_account,
-        #     "The account number you entered in Bank Integration Settings could not be found in NetBanking",
-        # )
-
-        # to account
-        # try:
-        #     account_index = self.br.execute_script(
-        #         'return l_beneacct.indexOf("{}");'.format(self.data.to_account)
-        #     )
-        # except:
-        #     self.throw("Failed to select beneficiary in Netbanking")
-
-        # if account_index == -1:
-        #     self.throw("Beneficary account number not found in Netbanking")
-        # else:
-        #     account_index = str(account_index)
-
-        # beneficiary = self.get_element("fldBeneId", now=True)
-        # self.click_option(
-        #     beneficiary,
-        #     account_index,
-        #     "Unable to find a beneficiary associated with the party's account number",
-        #     exact=True,
-        # )
-
-        # time.sleep(0.5)
-        # if (
-        #     self.get_element("fldBeneAcct", now=True).get_attribute("value") or ""
-        # ).strip() != self.data.to_account:
-        #     self.throw(
-        #         "Incorrect account selected. Please contact developer for support."
-        #     )
-
-        # # description
-        # desc = self.get_element("fldTxnDesc", now=True)
-        # desc.clear()
-        # desc.send_keys(self.data.payment_desc)
-
-        # # amount
-        # amt = self.get_element("fldTxnAmount", now=True)
-        # amt.clear()
-        # amt.send_keys("%.2f" % self.data.amount)
-
-        # communication type
-        # comm_type = self.get_element("fldComMode", now=True)
-        # self.click_option(
-        #     comm_type,
-        #     self.data.comm_type,
-        #     "Unable to select communication type in NEFT form",
-        #     compare_text=True,
-        # )
-
-        # # communication value
-        # comm_value = self.get_element("fldMobileEmail", now=True)
-        # comm_value.clear()
-        # comm_value.send_keys(self.data.comm_value)
-
-        # # accept terms
-        # self.get_element(
-        #     "//*[@name='fldtc']/preceding-sibling::span[@class='checkbox']",
-        #     "xpath",
-        #     now=True,
-        # ).click()
-
-        # # continue
-        # self.br.execute_script("return formSubmit();")
-
-        # # confirm
-        # self.switch_to_frame("main_part")
-        # self.br.execute_script("return formSubmit();")
-
-        # self.switch_to_frame("main_part")
-
-        # try:
-        #     self.wait_until(
-        #         AnyEC(
-        #             EC.visibility_of_element_located((By.NAME, "fldMobile")),
-        #             EC.visibility_of_element_located((By.NAME, "fldAnswer")),
-        #             EC.visibility_of_element_located(
-        #                 (By.XPATH, "//td[contains(text(),'Reference Number')]")
-        #             ),
-        #         ),
-        #         throw=False,
-        #     )
-        # except:
-        #     self.throw(
-        #         "Failed to find indication of successful payment. Please check is payment has been processed manually.",
-        #         screenshot=True,
-        #     )
-
         elif "fldAnswer" == self.br._found_element[-1]:
             self.process_security_questions()
         else:
