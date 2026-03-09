@@ -55,7 +55,7 @@ class BankAPI:
 
     def setup_browser(self):
         from selenium.webdriver.remote.remote_connection import RemoteConnection
-        if not isinstance(RemoteConnection._timeout, (int, float)) and RemoteConnection._timeout is not None:
+        if not isinstance(RemoteConnection._timeout, (int, float)) :
             RemoteConnection.set_timeout(90)
         self.br = webdriver.Chrome(options=self.get_options())
 

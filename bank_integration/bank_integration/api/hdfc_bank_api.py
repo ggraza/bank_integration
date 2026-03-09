@@ -70,9 +70,15 @@ class HDFCBankAPI(BankAPI):
                     EC.visibility_of_element_located((By.ID, "proceedBtn")),
                     EC.visibility_of_element_located((By.ID, "mfa-get-otp-btn")),
                     EC.presence_of_element_located((By.TAG_NAME, "bb-retail-layout")),
+                    EC.visibility_of_element_located((By.NAME, "fldOldPass")),
+                    EC.visibility_of_element_located((By.NAME, "fldAnswer")),
                 ),
                 throw="ignore",
             )
+            # NOTE: The 'fldOldPass' and 'fldAnswer' conditions are not hit in the
+            # current HDFC UI. We still include them here so future maintainers know
+            # there is existing logic to handle password‑expiry and security‑question
+            # screens if the bank reintroduces them.
             found = self.br._found_element
 
             if not found:
@@ -106,6 +112,10 @@ class HDFCBankAPI(BankAPI):
                 self.process_security_questions()
                 return
 
+            elif last == "mfa-get-otp-btn":
+                self.process_otp()
+                return
+
             elif last == "bb-retail-layout":
                 if self.br.find_elements(By.ID, "mfa-get-otp-btn"):
                     self.process_otp()
@@ -134,7 +144,7 @@ class HDFCBankAPI(BankAPI):
                 ),
                 throw=False,
             )
-        except:
+        except Exception:
             self.throw(
                 "Failed to find Get Otp Button. Payment is not successful.",
                 screenshot=True,
@@ -296,19 +306,23 @@ class HDFCBankAPI(BankAPI):
 
     def logout(self):
         if self.logged_in:
-            logout_btn1 = self.br.find_element(
-                By.CSS_SELECTOR,
-                'div.logout-icon-container[aria-label="Logout"][role="button"]',
-            )
-            self.br.execute_script("arguments[0].click();", logout_btn1)
-            self.br.switch_to.default_content()
-            logout_btn2 = self.br.find_element(
-                By.XPATH,
-                '//button[contains(@class,"bb-button-bar__button") and normalize-space(text())="Logout"]',
-            )
-            self.br.execute_script("arguments[0].click();", logout_btn2)
-            time.sleep(1)
-
+            try:
+                logout_btn1 = self.br.find_element(
+                    By.CSS_SELECTOR,
+                    'div.logout-icon-container[aria-label="Logout"][role="button"]',
+                )
+                self.br.execute_script("arguments[0].click();", logout_btn1)
+                self.br.switch_to.default_content()
+                logout_btn2 = self.br.find_element(
+                    By.XPATH,
+                    '//button[contains(@class,"bb-button-bar__button") and normalize-space(text())="Logout"]',
+                )
+                self.br.execute_script("arguments[0].click();", logout_btn2)
+                time.sleep(1)
+            except Exception:
+                self.show_msg(
+                    "We were unable to complete the logout process on the bank website. Please manually log out from your online banking account to end the session safely."
+                )
         self.delete_cache()
         self.br.quit()
 
@@ -329,11 +343,11 @@ class HDFCBankAPI(BankAPI):
         to_account_input_box = self.get_element("typeahead-template", "id")
         to_account_input_box.click()
         to_account_input_box.send_keys(self.data.to_account, Keys.ENTER)
-        wait = WebDriverWait(self.br, 10)
-        option = wait.until(
+        option = self.wait_until(
             EC.element_to_be_clickable(
                 (By.CSS_SELECTOR, "li.custom-to-account div.select-account-body")
-            )
+            ),
+            timeout=10,
         )
         option.click()
 
@@ -357,7 +371,7 @@ class HDFCBankAPI(BankAPI):
         are masked (e.g. "**** **** **26 18"), so we match using the last 4
         digits of self.data.from_account.
         """
-        time.sleep(1)  
+        time.sleep(1)
 
         from_account_selectors = self.br.find_elements(
             By.CSS_SELECTOR, 'ng-select[name="bb-custom-account-selector"]'
@@ -374,14 +388,16 @@ class HDFCBankAPI(BankAPI):
         if already_selected:
             selected_text = already_selected[0].text or ""
             last4 = self.data.from_account.strip().replace(" ", "")[-4:]
-            if last4 and last4[-2:] in selected_text:
+            if last4 and (
+                last4 in selected_text.replace(" ", "") or last4[-2:] in selected_text
+            ):
                 return
 
         self.show_msg("Selecting from account...")
 
         account_stripped = self.data.from_account.strip().replace(" ", "")
-        last4 = account_stripped[-4:] 
-        last4_spaced = last4[-4:-2] + " " + last4[-2:]  
+        last4 = account_stripped[-4:]
+        last4_spaced = last4[-4:-2] + " " + last4[-2:]
 
         try:
             select_container = from_account_select.find_element(
@@ -391,12 +407,12 @@ class HDFCBankAPI(BankAPI):
         except Exception:
             self.br.execute_script("arguments[0].click();", from_account_select)
 
-        wait = WebDriverWait(self.br, 10)
         try:
-            wait.until(
+            self.wait_until(
                 EC.presence_of_element_located(
                     (By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option")
-                )
+                ),
+                timeout=10,
             )
         except TimeoutException:
             self.throw(
@@ -405,7 +421,7 @@ class HDFCBankAPI(BankAPI):
                 screenshot=True,
             )
 
-        time.sleep(0.5)  
+        time.sleep(1)
 
         dropdown_options = self.br.find_elements(
             By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option"
@@ -543,7 +559,7 @@ class HDFCBankAPI(BankAPI):
                 ),
                 throw=False,
             )
-        except:
+        except Exception:
             self.throw(
                 "Failed to find indication of successful payment. Please check if payment has been processed manually.",
                 screenshot=True,
@@ -610,7 +626,7 @@ class HDFCBankAPI(BankAPI):
                 ),
                 throw=False,
             )
-        except:
+        except Exception:
             self.throw(
                 "Failed to find indication of successful payment. Please check if payment has been processed manually.",
                 screenshot=True,
@@ -654,16 +670,14 @@ class HDFCBankAPI(BankAPI):
             self.br.switch_to.default_content()
 
             if self.data.transfer_type == "Transfer within the bank":
-                self.get_element("span.success-tick", "css_selector")
+                self.get_element("span.success-tick", "css_selector", throw=False)
 
             elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-                self.get_element("span.success-tick", "css_selector")
+                self.get_element("span.success-tick", "css_selector", throw=False)
 
         except TimeoutException:
             self.throw(
-                "{} authentication failed. Exiting..".format(
-                    "OTP" if otp else "Security questions"
-                ),
+                "We could not detect a payment success confirmation on the bank website. Please verify whether the payment went through, either directly on the bank portal or using the attached screenshot.",
                 screenshot=True,
             )
         else:
