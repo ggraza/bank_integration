@@ -77,7 +77,7 @@ class HDFCBankAPI(BankAPI):
             )
             # NOTE: The 'fldOldPass' and 'fldAnswer' conditions are not hit in the
             # current HDFC UI. We still include them here so future maintainers know
-            # there is existing logic to handle password‑expiry and security‑question
+            # there is existing logic to handle password-expiry and security-question
             # screens if the bank reintroduces them.
             found = self.br._found_element
 
@@ -271,6 +271,7 @@ class HDFCBankAPI(BankAPI):
         self.br.execute_script("return submit_challenge();")
 
     def continue_login(self, otp=None, answers=None):
+        self.br.switch_to.default_content()
         self.submit_otp_or_answers(otp, answers)
         try:
             self.get_element(
@@ -389,7 +390,7 @@ class HDFCBankAPI(BankAPI):
             selected_text = already_selected[0].text or ""
             last4 = self.data.from_account.strip().replace(" ", "")[-4:]
             if last4 and (
-                last4 in selected_text.replace(" ", "") or last4[-2:] in selected_text
+                last4 in selected_text.replace(" ", "")
             ):
                 return
 
@@ -413,6 +414,7 @@ class HDFCBankAPI(BankAPI):
                     (By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option")
                 ),
                 timeout=10,
+                throw=False
             )
         except TimeoutException:
             self.throw(
@@ -420,8 +422,6 @@ class HDFCBankAPI(BankAPI):
                 "Please check if the HDFC portal layout has changed.",
                 screenshot=True,
             )
-
-        time.sleep(1)
 
         dropdown_options = self.br.find_elements(
             By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option"
@@ -508,6 +508,41 @@ class HDFCBankAPI(BankAPI):
                 screenshot=True,
             )
 
+    def _handle_post_confirm_payment_state(self):
+        self.br.switch_to.default_content()
+
+        try:
+            self.wait_until(
+                AnyEC(
+                    EC.visibility_of_element_located(
+                        (
+                            By.XPATH,
+                            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
+                        )
+                    ),
+                    EC.visibility_of_element_located((By.NAME, "fldAnswer")),
+                    EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, "span.success-tick")
+                    ),
+                ),
+                throw=False,
+            )
+        except Exception:
+            self.throw(
+                "Failed to find OTP Button.",
+                screenshot=True,
+            )
+
+        if (
+            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
+            == self.br._found_element[-1]
+        ):
+            self.process_otp()
+        elif "fldAnswer" == self.br._found_element[-1]:
+            self.process_security_questions()
+        else:
+            self.payment_success()
+
     def make_payment_within_bank(self):
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
@@ -541,39 +576,7 @@ class HDFCBankAPI(BankAPI):
             "css_selector",
         )
         confirm_btn.click()
-        self.br.switch_to.default_content()
-
-        try:
-            self.wait_until(
-                AnyEC(
-                    EC.visibility_of_element_located(
-                        (
-                            By.XPATH,
-                            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
-                        )
-                    ),
-                    EC.visibility_of_element_located((By.NAME, "fldAnswer")),
-                    EC.visibility_of_element_located(
-                        (By.CSS_SELECTOR, "span.success-tick")
-                    ),
-                ),
-                throw=False,
-            )
-        except Exception:
-            self.throw(
-                "Failed to find indication of successful payment. Please check if payment has been processed manually.",
-                screenshot=True,
-            )
-
-        if (
-            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
-            == self.br._found_element[-1]
-        ):
-            self.process_otp()
-        elif "fldAnswer" == self.br._found_element[-1]:
-            self.process_security_questions()
-        else:
-            self.payment_success()
+        self._handle_post_confirm_payment_state()
 
     def make_neft_payment(self):
         amt = self.get_element("transfer-amount-input", "id")
@@ -608,39 +611,7 @@ class HDFCBankAPI(BankAPI):
             "css_selector",
         )
         confirm_btn.click()
-        self.br.switch_to.default_content()
-
-        try:
-            self.wait_until(
-                AnyEC(
-                    EC.visibility_of_element_located(
-                        (
-                            By.XPATH,
-                            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
-                        )
-                    ),
-                    EC.visibility_of_element_located((By.NAME, "fldAnswer")),
-                    EC.visibility_of_element_located(
-                        (By.CSS_SELECTOR, "span.success-tick")
-                    ),
-                ),
-                throw=False,
-            )
-        except Exception:
-            self.throw(
-                "Failed to find indication of successful payment. Please check if payment has been processed manually.",
-                screenshot=True,
-            )
-
-        if (
-            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
-            == self.br._found_element[-1]
-        ):
-            self.process_otp()
-        elif "fldAnswer" == self.br._found_element[-1]:
-            self.process_security_questions()
-        else:
-            self.payment_success()
+        self._handle_post_confirm_payment_state()
 
     def click_option(
         self, element, to_click, error=None, exact=False, compare_text=False
