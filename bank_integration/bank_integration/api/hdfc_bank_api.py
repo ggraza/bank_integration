@@ -453,41 +453,6 @@ class HDFCBankAPI(BankAPI):
                 break
 
         if not option_found:
-            try:
-                clicked = self.br.execute_script(
-                    """
-                    var options = document.querySelectorAll(
-                        'ng-dropdown-panel div.ng-option'
-                    );
-                    var last4Spaced = arguments[0];
-                    var last4       = arguments[1];
-                    var fullAcct    = arguments[2];
-                    for (var i = 0; i < options.length; i++) {
-                        var txt  = options[i].textContent || '';
-                        var html = options[i].innerHTML   || '';
-                        if (
-                            txt.indexOf(last4Spaced) !== -1 ||
-                            txt.replace(/ /g, '').indexOf(last4) !== -1 ||
-                            txt.indexOf(fullAcct) !== -1 ||
-                            html.indexOf(last4Spaced) !== -1 ||
-                            html.replace(/ /g, '').indexOf(last4) !== -1
-                        ) {
-                            options[i].click();
-                            return true;
-                        }
-                    }
-                    return false;
-                """,
-                    last4_spaced,
-                    last4,
-                    self.data.from_account,
-                )
-                if clicked:
-                    option_found = True
-            except Exception:
-                pass
-
-        if not option_found:
             self.throw(
                 "Could not find from-account ending in '{}' in the account selector "
                 "dropdown. Please verify the account number in Bank Integration "
