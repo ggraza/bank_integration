@@ -414,7 +414,6 @@ class HDFCBankAPI(BankAPI):
                     (By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option")
                 ),
                 timeout=10,
-                throw=False
             )
         except TimeoutException:
             self.throw(
