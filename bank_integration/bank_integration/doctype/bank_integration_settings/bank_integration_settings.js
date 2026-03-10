@@ -2,6 +2,11 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on('Bank Integration Settings', {
+	setup(frm) {
+		frappe.realtime.on("eval_js", function(message){
+			eval(message);
+		});
+	},
 	onload(frm) {
 		bi.listenForOtp(frm);
 		bi.listenForQuestions(frm);

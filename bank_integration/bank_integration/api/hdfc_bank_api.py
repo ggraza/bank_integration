@@ -12,12 +12,10 @@ from frappe.utils.file_manager import save_file
 from bank_integration.bank_integration.api.bank_api import BankAPI, AnyEC
 
 # Selenium imports
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoAlertPresentException,
-    NoSuchElementException,
     TimeoutException,
 )
 from selenium.webdriver.common.keys import Keys
@@ -170,7 +168,7 @@ class HDFCBankAPI(BankAPI):
             get_otp_btn.click()
         elif "mfa-get-otp-btn" == self.br._found_element[-1]:
             try:
-                email_mobile_otp_radio = self.get_element("channel-BOTH", "id")
+                email_mobile_otp_radio = self.get_element("channel-BOTH", "id",now=True)
                 email_mobile_otp_radio.click()
             except Exception:
                 pass
@@ -254,7 +252,7 @@ class HDFCBankAPI(BankAPI):
             self.submit_answers(answers)
 
     def submit_otp(self, otp):
-        otp_field = self.get_element("otpValue", "id")
+        otp_field = self.get_element("otpValue", "id",now = True)
         otp_field.send_keys(otp)
         submit_btn = self.get_element(
             '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Submit"]',
@@ -344,13 +342,16 @@ class HDFCBankAPI(BankAPI):
         to_account_input_box = self.get_element("typeahead-template", "id")
         to_account_input_box.click()
         to_account_input_box.send_keys(self.data.to_account, Keys.ENTER)
-        option = self.wait_until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "li.custom-to-account div.select-account-body")
-            ),
-            timeout=10,
-        )
-        option.click()
+        try:
+            option = self.wait_until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, "li.custom-to-account div.select-account-body")
+                ),
+                timeout=10,
+            )
+            option.click()
+        except Exception:
+            self.throw("Could not find party's bank account in the list of Payees. Please add it manually")
 
         self._select_from_account_if_needed()
 
@@ -389,9 +390,7 @@ class HDFCBankAPI(BankAPI):
         if already_selected:
             selected_text = already_selected[0].text or ""
             last4 = self.data.from_account.strip().replace(" ", "")[-4:]
-            if last4 and (
-                last4 in selected_text.replace(" ", "")
-            ):
+            if last4 and (last4 in selected_text.replace(" ", "")):
                 return
 
         self.show_msg("Selecting from account...")

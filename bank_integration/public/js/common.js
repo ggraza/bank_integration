@@ -27,6 +27,7 @@ bi.listenForOtp = function (frm) {
 					docname: frm.doc.name,
 					logged_in: data.logged_in},
 			});
+			frappe.msgprint("Verifying OTP!!")
 			delete frm.otp_requested;
 		}, 'Enter OTP');
 

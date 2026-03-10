@@ -20,7 +20,7 @@ class BankAPI:
         self,
         username=None,
         password=None,
-        timeout=30,
+        timeout=10,
         logged_in=0,
         doctype=None,
         docname=None,
@@ -69,7 +69,7 @@ class BankAPI:
             "Chrome/121.0.0.0 Safari/537.36"
         )
 
-        if frappe.conf.developer_mode:
+        if not frappe.conf.developer_mode:
             options.add_argument("--headless=new")
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
