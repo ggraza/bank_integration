@@ -37,6 +37,7 @@ class BankAPI:
         self.uid = uid or frappe.utils.random_string(7)
         self.cache_key = "bank_" + self.uid
         self.data = data
+        
 
         if getattr(self, "init"):
             self.init()
@@ -53,14 +54,26 @@ class BankAPI:
         pass
 
     def setup_browser(self):
-        self.br = webdriver.Chrome(options=self.get_options(), port=12345)
+        from selenium.webdriver.remote.remote_connection import RemoteConnection
+        if not isinstance(RemoteConnection._timeout, (int, float)) :
+            RemoteConnection.set_timeout(90)
+        self.br = webdriver.Chrome(options=self.get_options())
 
     def get_options(self):
         options = Options()
-        options.add_argument("window-size=990,1200")
+        options.add_argument("--window-size=990,1200")
+
+        options.add_argument(
+            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/121.0.0.0 Safari/537.36"
+        )
+
         if not frappe.conf.developer_mode:
-            options.add_argument("--headless")
-            options.add_experimental_option("w3c", False)
+            options.add_argument("--headless=new")
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
 
         return options
 

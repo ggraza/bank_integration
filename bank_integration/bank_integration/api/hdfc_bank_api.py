@@ -12,12 +12,10 @@ from frappe.utils.file_manager import save_file
 from bank_integration.bank_integration.api.bank_api import BankAPI, AnyEC
 
 # Selenium imports
-from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.common.exceptions import (
     NoAlertPresentException,
-    NoSuchElementException,
     TimeoutException,
 )
 from selenium.webdriver.common.keys import Keys
@@ -36,98 +34,165 @@ class HDFCBankAPI(BankAPI):
         cust_id = self.get_element("fldLoginUserId")
         cust_id.send_keys(self.username, Keys.ENTER)
 
-        pass_input = self.get_element("fldPassword")
-
-        try:
-            secure_access_cb = self.get_element(
-                "chkrsastu", "id", timeout=2, throw=False
-            )
-            secure_access_cb.click()
-        except TimeoutException:
-            pass
-
-        try:
-            self.get_element("fldCaptcha", timeout=1, throw=False)
-        except TimeoutException:
-            pass
-        else:
-            self.throw(
-                "HDFC Netbanking is asking for a CAPTCHA, which we don't currently support. Exiting."
-            )
+        self.br.switch_to.default_content()
+        pass_input = self.get_element("password", "id")
 
         pass_input.send_keys(self.password, Keys.ENTER)
 
-        self.wait_until(
-            AnyEC(
-                EC.visibility_of_element_located(
-                    (
-                        By.XPATH,
-                        "//td/span[text()[contains(.,'The Customer ID/IPIN (Password) is invalid.')]]",
-                    )
+        self.br.switch_to.default_content()
+        self._handle_post_login_state()
+
+    def _handle_post_login_state(self):
+        """
+        After password submission, HDFC can land on different screens:
+          1. Invalid credentials error
+          2. Password expired screen (fldOldPass)
+          3. "Already logged in" dialog with a Proceed button (proceedBtn).
+             This dialog can appear up to 2 times back-to-back.
+          4. OTP screen (mfa-get-otp-btn)
+          5. Security questions screen (fldAnswer)
+          6. Angular dashboard (bb-retail-layout tag) — direct login success
+        We loop up to 3 times so we can dismiss up to 2 proceed dialogs before
+        reaching the final state.
+        """
+
+        for _ in range(3):
+            self.wait_until(
+                AnyEC(
+                    EC.visibility_of_element_located(
+                        (
+                            By.XPATH,
+                            "//td/span[text()[contains(.,'The Customer ID/IPIN (Password) is invalid.')]]",
+                        )
+                    ),
+                    EC.visibility_of_element_located((By.ID, "proceedBtn")),
+                    EC.visibility_of_element_located((By.ID, "mfa-get-otp-btn")),
+                    EC.presence_of_element_located((By.TAG_NAME, "bb-retail-layout")),
+                    EC.visibility_of_element_located((By.NAME, "fldOldPass")),
+                    EC.visibility_of_element_located((By.NAME, "fldAnswer")),
                 ),
-                EC.visibility_of_element_located((By.NAME, "fldOldPass")),
-                EC.visibility_of_element_located((By.NAME, "fldMobile")),
-                EC.visibility_of_element_located((By.NAME, "fldAnswer")),
-                EC.visibility_of_element_located((By.NAME, "common_menu1")),
-            ),
-            throw="ignore",
-        )
+                throw="ignore",
+                timeout=10,
+            )
+            # NOTE: The 'fldOldPass' and 'fldAnswer' conditions are not hit in the
+            # current HDFC UI. We still include them here so future maintainers know
+            # there is existing logic to handle password-expiry and security-question
+            # screens if the bank reintroduces them.
+            found = self.br._found_element
 
-        if not self.br._found_element:
-            self.handle_login_error()
+            if not found:
+                if self.br.find_elements(By.ID, "mfa-get-otp-btn"):
+                    self.process_otp()
+                    return
+                if self.br.find_elements(By.ID, "proceedBtn"):
+                    self.br.find_element(By.ID, "proceedBtn").click()
+                    continue
+                self.handle_login_error()
+                return
 
-        elif "fldOldPass" == self.br._found_element[-1]:
-            self.throw(
-                (
+            last = found[-1]
+
+            if "is invalid" in last:
+                self.throw(
+                    "The password you've set in Bank Integration Settings is incorrect."
+                )
+
+            elif last == "fldOldPass":
+                self.throw(
                     "The password you've set has expired. "
                     "Please set a new password manually and update the same in Bank Integration Settings."
                 )
-            )
 
-        elif "is invalid" in self.br._found_element[-1]:
-            self.throw(
-                "The password you've set in Bank Integration Settings is incorrect."
-            )
+            elif last == "proceedBtn":
+                self.get_element("proceedBtn", "id", now=True).click()
+                continue
 
-        elif "fldMobile" == self.br._found_element[-1]:
-            self.process_otp()
-        elif "fldAnswer" == self.br._found_element[-1]:
-            self.process_security_questions()
-        else:
-            self.login_success()
+            elif last == "fldAnswer":
+                self.process_security_questions()
+                return
+
+            elif last == "mfa-get-otp-btn":
+                self.process_otp()
+                return
+
+            elif last == "bb-retail-layout":
+                if self.br.find_elements(By.ID, "mfa-get-otp-btn"):
+                    self.process_otp()
+                else:
+                    self.login_success()
+                return
+
+            else:
+                self.handle_login_error()
+                return
+
+        self.handle_login_error()
 
     def process_otp(self):
-        mobile_no = email_id = None
-        self.get_element("fldMobile", now=True).click()
 
         try:
-            mobile_no = self.get_element(
-                '//*[@name="fldMobile"]/../following-sibling::td[last()]',
+            self.wait_until(
+                AnyEC(
+                    EC.visibility_of_element_located(
+                        (
+                            By.XPATH,
+                            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
+                        )
+                    ),
+                    EC.presence_of_element_located((By.ID, "mfa-get-otp-btn")),
+                ),
+                throw=False,
+            )
+        except Exception:
+            self.throw(
+                "Failed to find Get Otp Button. Payment is not successful.",
+                screenshot=True,
+            )
+
+        if (
+            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
+            == self.br._found_element[-1]
+        ):
+            try:
+                email_mobile_otp_label = self.get_element(
+                    '//label[@data-role="radio-group-option"][.//span[contains(text(),"SMS") and contains(text(),"email")]]',
+                    "xpath",
+                )
+                self.br.execute_script("arguments[0].click();", email_mobile_otp_label)
+            except Exception:
+                pass
+            get_otp_btn = self.get_element(
+                '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
                 "xpath",
                 now=True,
-                throw=False,
-            ).text
-        except NoSuchElementException:
-            pass
+            )
+            get_otp_btn.click()
+        elif "mfa-get-otp-btn" == self.br._found_element[-1]:
+            try:
+                email_mobile_otp_radio = self.get_element("channel-BOTH", "id",now=True)
+                email_mobile_otp_radio.click()
+            except Exception:
+                pass
+            otp_btn = self.get_element("mfa-get-otp-btn", "id", now=True)
+            self.br.execute_script("arguments[0].click();", otp_btn)
 
-        try:
-            self.get_element("fldEmailid", now=True, throw=False).click()
-            email_id = self.get_element(
-                '//*[@name="fldEmailid"]/../following-sibling::td[last()]',
-                "xpath",
-                now=True,
-                throw=False,
-            ).text
-        except NoSuchElementException:
-            pass
-
-        self.br.execute_script("return fireOtp();")
+        self.br.switch_to.default_content()
+        input_msg = ""
+        if (
+            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
+            == self.br._found_element[-1]
+        ):
+            try:
+                input_msg = self.get_element(
+                    'label[for="otpValue"]', "css_selector"
+                ).text
+            except Exception:
+                pass
 
         frappe.publish_realtime(
             "get_bank_otp",
             {
-                "mobile_no": mobile_no,
-                "email_id": email_id,
+                "message": input_msg,
                 "uid": self.uid,
                 "bank_name": self.bank_name,
                 "logged_in": self.logged_in,
@@ -156,8 +221,8 @@ class HDFCBankAPI(BankAPI):
         self.save_for_later()
 
     def get_question_map(self, get_fields=False):
-        question_elements = self.br.find_elements_by_name("fldQuestionText")
-        answer_elements = self.br.find_elements_by_name("fldAnswer")
+        question_elements = self.br.find_elements(By.NAME, "fldQuestionText")
+        answer_elements = self.br.find_elements(By.NAME, "fldAnswer")
 
         question_map = {}
         i = 0
@@ -188,9 +253,29 @@ class HDFCBankAPI(BankAPI):
             self.submit_answers(answers)
 
     def submit_otp(self, otp):
-        otp_field = self.get_element("fldOtpToken")
+        # There can be multiple #otpValue elements in the DOM (one hidden
+        # behind the modal, one visible inside it). Pick the visible one.
+        otp_field = self.br.execute_script("""
+            var fields = document.querySelectorAll('#otpValue');
+            for (var i = 0; i < fields.length; i++) {
+                var r = fields[i].getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) return fields[i];
+            }
+            return fields[fields.length - 1];
+        """)
         otp_field.send_keys(otp)
-        self.br.execute_script("return authOtp();")
+        self.br.switch_to.default_content()
+        submit_btn = self.br.execute_script("""
+            var btns = document.querySelectorAll('button.bb-button-bar__button.btn-primary');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.trim() === 'Submit') return btns[i];
+            }
+            return null;
+        """)
+        if submit_btn:
+            self.br.execute_script("arguments[0].click();", submit_btn)
+        else:
+            self.throw("Could not find OTP Submit button.", screenshot=True)
 
     def submit_answers(self, answers):
         field_map = self.get_question_map(True)
@@ -201,9 +286,14 @@ class HDFCBankAPI(BankAPI):
         self.br.execute_script("return submit_challenge();")
 
     def continue_login(self, otp=None, answers=None):
+        self.br.switch_to.default_content()
         self.submit_otp_or_answers(otp, answers)
         try:
-            self.get_element("common_menu1", throw=False)
+            self.get_element(
+                '//h1[@data-role="headings" and contains(@class,"bb-heading-widget__heading")]',
+                "xpath",
+                throw=False,
+            )
         except TimeoutException:
             self.handle_login_error()
         else:
@@ -232,201 +322,281 @@ class HDFCBankAPI(BankAPI):
 
     def logout(self):
         if self.logged_in:
-            self.switch_to_frame("common_menu1")
-            self.br.execute_script("return Logout();")
-            time.sleep(1)
-
+            try:
+                logout_btn1 = self.br.find_element(
+                    By.CSS_SELECTOR,
+                    'div.logout-icon-container[aria-label="Logout"][role="button"]',
+                )
+                self.br.execute_script("arguments[0].click();", logout_btn1)
+                self.br.switch_to.default_content()
+                logout_btn2 = self.br.find_element(
+                    By.XPATH,
+                    '//button[contains(@class,"bb-button-bar__button") and normalize-space(text())="Logout"]',
+                )
+                self.br.execute_script("arguments[0].click();", logout_btn2)
+                time.sleep(1)
+            except Exception:
+                self.show_msg(
+                    "We were unable to complete the logout process on the bank website. Please manually log out from your online banking account to end the session safely."
+                )
         self.delete_cache()
         self.br.quit()
 
     def make_payment(self):
-        self.switch_to_frame("common_menu1")
-        self.get_element("//a[@title='Funds Transfer']", "xpath", now=True).click()
+        self.br.switch_to.default_content()
+        clicked = self.br.execute_script("""
+            var el = document.querySelector("a[routerlink='/transfers/send-money']");
+            if (el) { el.click(); return true; }
+            return false;
+        """)
+        if not clicked:
+            self.throw(
+                "Could not find the 'Send Money' navigation link. The HDFC portal layout may have changed."
+            )
 
-        self.switch_to_frame("main_part")
-        self.get_element("selectTPT", "class_name")
+        self.wait_until(EC.url_contains("/transfers/send-money"))
+
+        to_account_input_box = self.get_element("typeahead-template", "id")
+        to_account_input_box.click()
+        to_account_input_box.send_keys(self.data.to_account, Keys.ENTER)
+        try:
+            option = self.wait_until(
+                EC.element_to_be_clickable(
+                    (By.CSS_SELECTOR, "li.custom-to-account div.select-account-body")
+                ),
+                timeout=10,
+            )
+            option.click()
+        except Exception:
+            self.throw("Could not find party's bank account in the list of Payees. Please add it manually")
+
+        self._select_from_account_if_needed()
 
         if self.data.transfer_type == "Transfer within the bank":
             self.make_payment_within_bank()
         elif self.data.transfer_type == "Transfer to other bank (NEFT)":
             self.make_neft_payment()
 
-    def make_payment_within_bank(self):
-        self.br.execute_script("return formSubmit_new('TPT');")
+    def _select_from_account_if_needed(self):
+        """
+        After the to-account is selected, HDFC may show an ng-select dropdown
+        for the from-account if the user has child/parent accounts.
+        If there is only one account (no child/parent), the website auto-sets
+        the from-account and no dropdown appears.
 
-        self.switch_to_frame("main_part")
-        self.get_element("selectselAcct0", "id")
+        The dropdown has NO search input — it renders a flat list of
+        div.ng-option elements each containing a
+        bb-custom-product-item-basic-account-ui component.  Account numbers
+        are masked (e.g. "**** **** **26 18"), so we match using the last 4
+        digits of self.data.from_account.
+        """
+        time.sleep(1)
 
-        # from account
-        from_account = self.get_element("selAcct", now=True)
-        self.click_option(
-            from_account,
-            self.data.from_account,
-            "The account number you entered in Bank Integration Settings could not be found in NetBanking",
+        from_account_selectors = self.br.find_elements(
+            By.CSS_SELECTOR, 'ng-select[name="bb-custom-account-selector"]'
         )
 
-        # to account
-        beneficiary = self.get_element("fldToAcct", now=True)
-        self.click_option(
-            beneficiary,
-            self.data.to_account,
-            "Unable to find a beneficiary associated with the party's account number",
+        if not from_account_selectors:
+            return
+
+        from_account_select = from_account_selectors[0]
+
+        already_selected = from_account_select.find_elements(
+            By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
+        )
+        if already_selected:
+            selected_text = already_selected[0].text or ""
+            last4 = self.data.from_account.strip().replace(" ", "")[-4:]
+            if last4 and (last4 in selected_text.replace(" ", "")):
+                return
+
+        self.show_msg("Selecting from account...")
+
+        account_stripped = self.data.from_account.strip().replace(" ", "")
+        last4 = account_stripped[-4:]
+        last4_spaced = last4[-4:-2] + " " + last4[-2:]
+
+        try:
+            select_container = from_account_select.find_element(
+                By.CSS_SELECTOR, "div.ng-select-container"
+            )
+            select_container.click()
+        except Exception:
+            self.br.execute_script("arguments[0].click();", from_account_select)
+
+        try:
+            self.wait_until(
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option")
+                ),
+                timeout=10,
+            )
+        except TimeoutException:
+            self.throw(
+                "From account selector appeared but the dropdown did not open. "
+                "Please check if the HDFC portal layout has changed.",
+                screenshot=True,
+            )
+
+        dropdown_options = self.br.find_elements(
+            By.CSS_SELECTOR, "ng-dropdown-panel div.ng-option"
         )
 
-        # description
-        desc = self.get_element("transferDtls", now=True)
-        desc.clear()
-        desc.send_keys(self.data.payment_desc)
+        if not dropdown_options:
+            self.throw(
+                "From account dropdown opened but contains no options.",
+                screenshot=True,
+            )
 
-        # amount
-        amt = self.get_element("transferAmt", now=True)
-        amt.clear()
-        amt.send_keys("%.2f" % self.data.amount)
+        option_found = False
 
-        # continue
-        self.br.execute_script("return onSubmit();")
+        for opt in dropdown_options:
+            opt_text = opt.text or ""
+            opt_html = opt.get_attribute("innerHTML") or ""
 
-        # confirm
-        self.switch_to_frame("main_part")
-        self.br.execute_script("return issue_click();")
+            if (
+                last4_spaced in opt_text
+                or last4 in opt_text.replace(" ", "")
+                or self.data.from_account in opt_text
+                or last4_spaced in opt_html
+                or last4 in opt_html.replace(" ", "")
+            ):
+                try:
+                    opt.click()
+                except Exception:
+                    self.br.execute_script("arguments[0].click();", opt)
+                option_found = True
+                break
 
-        self.switch_to_frame("main_part")
+        if not option_found:
+            self.throw(
+                "Could not find from-account ending in '{}' in the account selector "
+                "dropdown. Please verify the account number in Bank Integration "
+                "Settings.".format(last4_spaced),
+                screenshot=True,
+            )
+
+        time.sleep(1)
+
+        selected_values = from_account_select.find_elements(
+            By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
+        )
+        if not selected_values:
+            self.throw(
+                "From account selection did not register. "
+                "The dropdown may have closed without selecting an account.",
+                screenshot=True,
+            )
+
+    def _handle_post_confirm_payment_state(self):
+        self.br.switch_to.default_content()
 
         try:
             self.wait_until(
                 AnyEC(
-                    EC.visibility_of_element_located((By.NAME, "fldMobile")),
+                    EC.visibility_of_element_located(
+                        (
+                            By.XPATH,
+                            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]',
+                        )
+                    ),
                     EC.visibility_of_element_located((By.NAME, "fldAnswer")),
                     EC.visibility_of_element_located(
-                        (By.XPATH, "//span[@class='successIcon']")
+                        (By.CSS_SELECTOR, "span.success-tick")
                     ),
                 ),
                 throw=False,
             )
-        except:
+        except Exception:
             self.throw(
-                "Failed to find indication of successful payment. Please check is payment has been processed manually.",
+                "Failed to find OTP Button.",
                 screenshot=True,
             )
 
-        if "fldMobile" == self.br._found_element[-1]:
+        if (
+            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Get OTP"]'
+            == self.br._found_element[-1]
+        ):
             self.process_otp()
         elif "fldAnswer" == self.br._found_element[-1]:
             self.process_security_questions()
         else:
             self.payment_success()
+
+    def make_payment_within_bank(self):
+        amt = self.get_element("transfer-amount-input", "id")
+        amt.clear()
+        amt.send_keys("%.2f" % self.data.amount)
+
+        desc = self.get_element('input[data-role="input"]', "css_selector")
+        desc.clear()
+        desc.send_keys(self.data.payment_desc)
+
+        continue_btn = self.get_element(
+            'button[type="submit"].btn-primary.btn.btn-md.btn-block',
+            "css_selector",
+            now=True,
+        )
+        self.br.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", continue_btn
+        )
+        try:
+            continue_btn.click()
+        except Exception:
+            self.br.execute_script("arguments[0].click();", continue_btn)
+
+        checkbox_label = self.get_element(
+            'span.bb-input-checkbox__content[data-role="checkbox-label"]',
+            "css_selector",
+        )
+        checkbox_label.click()
+
+        confirm_btn = self.get_element(
+            'button.confirm-btn[aria-label="Confirm Transfer"]',
+            "css_selector",
+        )
+        confirm_btn.click()
+        self._handle_post_confirm_payment_state()
 
     def make_neft_payment(self):
-        self.br.execute_script("return formSubmit_new('NEFT');")
-
-        self.switch_to_frame("main_part")
-        self.get_element("selectselAcct0", "id")
-
-        # from account
-        from_account = self.get_element("selAcct", now=True)
-        self.click_option(
-            from_account,
-            self.data.from_account,
-            "The account number you entered in Bank Integration Settings could not be found in NetBanking",
-        )
-
-        # to account
-        try:
-            account_index = self.br.execute_script(
-                'return l_beneacct.indexOf("{}");'.format(self.data.to_account)
-            )
-        except:
-            self.throw("Failed to select beneficiary in Netbanking")
-
-        if account_index == -1:
-            self.throw("Beneficary account number not found in Netbanking")
-        else:
-            account_index = str(account_index)
-
-        beneficiary = self.get_element("fldBeneId", now=True)
-        self.click_option(
-            beneficiary,
-            account_index,
-            "Unable to find a beneficiary associated with the party's account number",
-            exact=True,
-        )
-
-        time.sleep(0.5)
-        if (
-            self.get_element("fldBeneAcct", now=True).get_attribute("value") or ""
-        ).strip() != self.data.to_account:
-            self.throw(
-                "Incorrect account selected. Please contact developer for support."
-            )
-
-        # description
-        desc = self.get_element("fldTxnDesc", now=True)
-        desc.clear()
-        desc.send_keys(self.data.payment_desc)
-
-        # amount
-        amt = self.get_element("fldTxnAmount", now=True)
+        amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
         amt.send_keys("%.2f" % self.data.amount)
 
-        # communication type
-        comm_type = self.get_element("fldComMode", now=True)
-        self.click_option(
-            comm_type,
-            self.data.comm_type,
-            "Unable to select communication type in NEFT form",
-            compare_text=True,
-        )
+        desc = self.get_element('input[data-role="input"]', "css_selector")
+        desc.clear()
+        desc.send_keys(self.data.payment_desc)
 
-        # communication value
-        comm_value = self.get_element("fldMobileEmail", now=True)
-        comm_value.clear()
-        comm_value.send_keys(self.data.comm_value)
-
-        # accept terms
-        self.get_element(
-            "//*[@name='fldtc']/preceding-sibling::span[@class='checkbox']",
-            "xpath",
+        continue_btn = self.get_element(
+            'button[type="submit"][aria-label="Continue transfer"]',
+            "css_selector",
             now=True,
-        ).click()
-
-        # continue
-        self.br.execute_script("return formSubmit();")
-
-        # confirm
-        self.switch_to_frame("main_part")
-        self.br.execute_script("return formSubmit();")
-
-        self.switch_to_frame("main_part")
-
+        )
+        self.br.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", continue_btn
+        )
         try:
-            self.wait_until(
-                AnyEC(
-                    EC.visibility_of_element_located((By.NAME, "fldMobile")),
-                    EC.visibility_of_element_located((By.NAME, "fldAnswer")),
-                    EC.visibility_of_element_located(
-                        (By.XPATH, "//td[contains(text(),'Reference Number')]")
-                    ),
-                ),
-                throw=False,
-            )
-        except:
-            self.throw(
-                "Failed to find indication of successful payment. Please check is payment has been processed manually.",
-                screenshot=True,
-            )
+            continue_btn.click()
+        except Exception:
+            self.br.execute_script("arguments[0].click();", continue_btn)
 
-        if "fldMobile" == self.br._found_element[-1]:
-            self.process_otp()
-        elif "fldAnswer" == self.br._found_element[-1]:
-            self.process_security_questions()
-        else:
-            self.payment_success()
+        checkbox_label = self.get_element(
+            'span.bb-input-checkbox__content[data-role="checkbox-label"]',
+            "css_selector",
+        )
+        checkbox_label.click()
+
+        confirm_btn = self.get_element(
+            'button.confirm-btn[aria-label="Confirm Transfer"]',
+            "css_selector",
+        )
+        confirm_btn.click()
+        self._handle_post_confirm_payment_state()
 
     def click_option(
         self, element, to_click, error=None, exact=False, compare_text=False
     ):
-        for option in element.find_elements_by_tag_name("option"):
+        for option in element.find_elements(By.TAG_NAME, "option"):
             if not compare_text:
                 val = option.get_attribute("value")
             else:
@@ -444,32 +614,31 @@ class HDFCBankAPI(BankAPI):
                 self.throw(error)
 
     def continue_payment(self, otp=None, answers=None):
-        self.switch_to_frame("main_part")
+        self.br.switch_to.default_content()
         self.submit_otp_or_answers(otp, answers)
 
         try:
-            self.switch_to_frame("main_part")
+            self.br.switch_to.default_content()
 
             if self.data.transfer_type == "Transfer within the bank":
-                self.get_element("//span[@class='successIcon']", "xpath", throw=False)
+                self.get_element("span.success-tick", "css_selector", throw=False)
 
             elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-                self.get_element(
-                    "//td[contains(text(),'Reference Number')]", "xpath", throw=False
-                )
+                self.get_element("span.success-tick", "css_selector", throw=False)
 
         except TimeoutException:
             self.throw(
-                "{} authentication failed. Exiting..".format(
-                    "OTP" if otp else "Security questions"
-                ),
+                "We could not detect a payment success confirmation on the bank website. Please verify whether the payment went through, either directly on the bank portal or using the attached screenshot.",
                 screenshot=True,
             )
         else:
             self.payment_success()
 
     def payment_success(self):
-        self.switch_to_frame("main_part")
+        self.br.switch_to.default_content()
+
+        details_button = self.get_element("showHideBtn", "id")
+        details_button.click()
 
         save_file(
             self.docname + " Online Payment Screenshot.png",
@@ -481,20 +650,30 @@ class HDFCBankAPI(BankAPI):
 
         ref_no = "-"
         if self.data.transfer_type == "Transfer within the bank":
-            ref_no = (
-                self.br.execute_script(
-                    "return $('table.transTable td:nth-child(3) > span').text();"
-                )
-                or "-"
-            )
-        elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-            ref_no = (
-                self.get_element(
-                    "//td[contains(text(),'Reference Number')]/following-sibling::td[last()]",
-                    "xpath",
-                ).text
-                or "-"
-            ).strip()
+            try:
+                ref_no = (
+                    self.get_element(
+                        "//div[normalize-space(text())='Transaction ID']/following-sibling::div[contains(@class,'bb-text-medium-bold')]",
+                        "xpath",
+                        now=True,
+                        throw=False,
+                    ).text
+                    or "-"
+                ).strip()
+            except Exception:
+                pass
+        else:
+            try:
+                ref_no = (
+                    self.get_element(
+                        '//div[contains(@class,"bb-support--subtitle") and contains(normalize-space(text()),"Reference")]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
+                        "xpath",
+                        throw=False,
+                    ).text
+                    or "-"
+                ).strip()
+            except Exception:
+                pass
 
         frappe.publish_realtime(
             "payment_success",
@@ -605,7 +784,7 @@ class HDFCBankAPI(BankAPI):
                 from_date = prev_valid_date
             from_date = add_days(from_date, -1)
 
-        self.br.find_elements_by_class_name("radio")[1].click()
+        self.br.find_elements(By.CLASS_NAME, "radio")[1].click()
 
         self.get_element("frmDatePicker", selector_type="id", now=True).send_keys(
             getdate(from_date).strftime("%d/%m/%Y")
@@ -616,7 +795,7 @@ class HDFCBankAPI(BankAPI):
         self.br.execute_script("return formSubmitbytype()")
 
         self.br.execute_script("$('.datatable').show()")
-        transaction_tables = self.br.find_elements_by_class_name("datatable")
+        transaction_tables = self.br.find_elements(By.CLASS_NAME, "datatable")
 
         if not transaction_tables:
             self.throw("No New Transactions found")
