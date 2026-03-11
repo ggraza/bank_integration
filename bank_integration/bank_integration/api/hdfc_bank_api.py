@@ -252,8 +252,18 @@ class HDFCBankAPI(BankAPI):
             self.submit_answers(answers)
 
     def submit_otp(self, otp):
-        otp_field = self.get_element("otpValue", "id",now = True)
+        # There can be multiple #otpValue elements in the DOM (one hidden
+        # behind the modal, one visible inside it). Pick the visible one.
+        otp_field = self.br.execute_script("""
+            var fields = document.querySelectorAll('#otpValue');
+            for (var i = 0; i < fields.length; i++) {
+                var r = fields[i].getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) return fields[i];
+            }
+            return fields[fields.length - 1];
+        """)
         otp_field.send_keys(otp)
+        self.br.switch_to.default_content()
         submit_btn = self.get_element(
             '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Submit"]',
             "xpath",
