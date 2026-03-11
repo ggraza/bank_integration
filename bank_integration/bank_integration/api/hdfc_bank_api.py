@@ -264,11 +264,17 @@ class HDFCBankAPI(BankAPI):
         """)
         otp_field.send_keys(otp)
         self.br.switch_to.default_content()
-        submit_btn = self.get_element(
-            '//button[contains(@class, "bb-button-bar__button") and contains(@class, "btn-primary") and normalize-space(text())="Submit"]',
-            "xpath",
-        )
-        submit_btn.click()
+        submit_btn = self.br.execute_script("""
+            var btns = document.querySelectorAll('button.bb-button-bar__button.btn-primary');
+            for (var i = 0; i < btns.length; i++) {
+                if (btns[i].textContent.trim() === 'Submit') return btns[i];
+            }
+            return null;
+        """)
+        if submit_btn:
+            self.br.execute_script("arguments[0].click();", submit_btn)
+        else:
+            self.throw("Could not find OTP Submit button.", screenshot=True)
 
     def submit_answers(self, answers):
         field_map = self.get_question_map(True)
