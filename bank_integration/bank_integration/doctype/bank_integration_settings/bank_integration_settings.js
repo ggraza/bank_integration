@@ -3,13 +3,9 @@
 
 frappe.ui.form.on('Bank Integration Settings', {
 	setup(frm) {
-		if(frm._eval_js_handler){
-			frappe.realtime.off("eval_js", frm._eval_js_handler);
-		}
-		frm._eval_js_handler = function(message) {
+		frappe.realtime.on("eval_js", function(message){
 			eval(message);
-		};
-		frappe.realtime.on("eval_js", frm._eval_js_handler);
+		});
 	},
 	onload(frm) {
 		bi.listenForOtp(frm);
