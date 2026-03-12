@@ -183,7 +183,7 @@ custom_fields = {
             'fieldname': 'transfer_type',
             'label': 'Bank Transfer Type',
             'fieldtype': 'Select',
-            'options': '\nTransfer within the bank\nTransfer to other bank (NEFT)',
+            'options': '\nTransfer within the bank\nTransfer to other bank (NEFT)\nTransfer to other bank (IMPS)\nTransfer to other bank (RTGS)',
             'depends_on': "eval:doc.pay_now",
             'insert_after': 'payment_desc',
             'print_hide': 1,

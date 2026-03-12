@@ -3,12 +3,19 @@
 
 frappe.ui.form.on('Payment Entry', {
     setup: function(frm) {
+        if(frm._eval_js_handler){
+			frappe.realtime.off("eval_js", frm._eval_js_handler);
+		}
         frappe.realtime.on("eval_js", function(message){
             eval(message);
         })
+        frm._eval_js_handler = function(message) {
+                eval(message);
+            };
+        frappe.realtime.on("eval_js", frm._eval_js_handler);    
     },
-
-	onload: function(frm) {
+	
+    onload: function(frm) {
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);
 
@@ -107,6 +114,17 @@ frappe.ui.form.on('Payment Entry', {
         set_transfer_type(frm);
     },
 
+    paid_amount: function(frm){
+        set_transfer_type(frm);
+        if (frm.doc.paid_amount>=200000){
+            frm.set_value('transfer_type', 'Transfer to other bank (RTGS)');
+            frm.refresh_field('transfer_type')
+        }else{
+            frm.set_value('transfer_type', 'Transfer to other bank (NEFT)');
+            frm.refresh_field('transfer_type')
+        }
+    },
+
     payment_desc: function(frm){
         frm.set_value('payment_desc', frm.doc.payment_desc.replace(/[^a-zA-Z0-9 ]/gi, ''));
     },
@@ -168,6 +186,8 @@ frappe.ui.form.on('Payment Entry', {
                 } else if (frm.doc.comm_type == 'Mobile') {
                     comm_value = frm.doc.comm_mobile;
                 }
+
+                set_transfer_type(frm)
 
                 frm.add_custom_button(__('Make Online Payment'), function() {
                     frappe.confirm(`Are you sure you want to proceed with the following details? <br>
@@ -352,9 +372,16 @@ function set_bank_name_and_ac(frm) {
 function set_transfer_type(frm) {
     if(frm.doc.paid_from_bank && frm.doc.party_bank) {
         if(frm.doc.paid_from_bank == frm.doc.party_bank){
+            frm.set_df_property("transfer_type","options",
+                ["Transfer within the bank"])
             frm.set_value('transfer_type', 'Transfer within the bank');
         } else {
-            frm.set_value('transfer_type', 'Transfer to other bank (NEFT)');
+            frm.set_df_property("transfer_type", "options", [
+            "Transfer to other bank (NEFT)",
+            "Transfer to other bank (IMPS)",
+            ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : [])
+            ].join("\n"));
+            frm.refresh_field("transfer_type");
         }
     } else {
         reset_fields(frm, 'transfer_type');

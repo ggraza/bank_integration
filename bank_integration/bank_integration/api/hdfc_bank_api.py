@@ -169,7 +169,9 @@ class HDFCBankAPI(BankAPI):
             get_otp_btn.click()
         elif "mfa-get-otp-btn" == self.br._found_element[-1]:
             try:
-                email_mobile_otp_radio = self.get_element("channel-BOTH", "id",now=True)
+                email_mobile_otp_radio = self.get_element(
+                    "channel-BOTH", "id", now=True
+                )
                 email_mobile_otp_radio.click()
             except Exception:
                 pass
@@ -368,14 +370,19 @@ class HDFCBankAPI(BankAPI):
             )
             option.click()
         except Exception:
-            self.throw("Could not find party's bank account in the list of Payees. Please add it manually")
+            self.throw(
+                "Could not find party's bank account in the list of Payees. Please add it manually"
+            )
 
         self._select_from_account_if_needed()
 
         if self.data.transfer_type == "Transfer within the bank":
             self.make_payment_within_bank()
-        elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-            self.make_neft_payment()
+        elif (
+            self.data.transfer_type.strip().rsplit(" ", 1)[0]
+            == "Transfer to other bank"
+        ):
+            self.make_inter_bank_payment()
 
     def _select_from_account_if_needed(self):
         """
@@ -558,10 +565,39 @@ class HDFCBankAPI(BankAPI):
         confirm_btn.click()
         self._handle_post_confirm_payment_state()
 
-    def make_neft_payment(self):
+    def make_inter_bank_payment(self):
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
         amt.send_keys("%.2f" % self.data.amount)
+
+        try:
+            match self.data.transfer_type:
+                case "Transfer to other bank (NEFT)":
+                    select_neft = self.get_element(
+                        "//div[contains(@class,'transfer-mode-')][.//label[normalize-space()='NEFT']]",
+                        "xpath",
+                    )
+                    select_neft.click()
+
+                case "Transfer to other bank (IMPS)":
+                    select_imps = self.get_element(
+                        "//div[contains(@class,'transfer-mode-')][.//label[normalize-space()='IMPS']]",
+                        "xpath",
+                    )
+                    select_imps.click()
+
+                case "Transfer to other bank (RTGS)":
+                    select_rtgs = self.get_element(
+                        "//div[contains(@class,'transfer-mode-')][.//label[normalize-space()='RTGS']]",
+                        "xpath",
+                    )
+                    select_rtgs.click()
+
+        except Exception:
+            self.throw(
+                "Unable to find the payment transfer type selection buttons. "
+                "The payment could not be completed, and the system logged out from the website."
+            )
 
         desc = self.get_element('input[data-role="input"]', "css_selector")
         desc.clear()
