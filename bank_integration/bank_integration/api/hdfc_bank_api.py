@@ -276,6 +276,18 @@ class HDFCBankAPI(BankAPI):
             self.br.execute_script("arguments[0].click();", submit_btn)
         else:
             self.throw("Could not find OTP Submit button.", screenshot=True)
+        
+        try:
+            self.br.switch_to.default_content()
+            proceed_btn = self.get_element("proceedBtn", "id", timeout=8,throw="ignore")
+            if proceed_btn:
+                proceed_btn.click()
+                # proceed btn prompt comes twice in the UI
+                proceed_btn = self.get_element("proceedBtn", "id", timeout=8,throw="ignore")
+                proceed_btn.click()
+        except Exception:
+            pass
+
 
     def submit_answers(self, answers):
         field_map = self.get_question_map(True)
