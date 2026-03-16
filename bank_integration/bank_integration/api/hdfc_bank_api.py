@@ -279,11 +279,11 @@ class HDFCBankAPI(BankAPI):
         
         try:
             self.br.switch_to.default_content()
-            proceed_btn = self.get_element("proceedBtn", "id", timeout=10)
+            proceed_btn = self.get_element("proceedBtn", "id", timeout=8,throw="ignore")
             if proceed_btn:
                 proceed_btn.click()
                 # proceed btn prompt comes twice in the UI
-                proceed_btn = self.get_element("proceedBtn", "id", timeout=10)
+                proceed_btn = self.get_element("proceedBtn", "id", timeout=8,throw="ignore")
                 proceed_btn.click()
         except Exception:
             pass
