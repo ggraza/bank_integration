@@ -36,7 +36,7 @@ frappe.listview_settings["Payment Entry"] = {
 
             let confirm_msg = `Are you sure you want to proceed with ${eligible_docs.length > 1 ? "these" : "this"} ${eligible_docs.length} payments?<br><br>`;
             eligible_docs.map((d, idx) => {
-                msg = `Party's Bank Account No: <strong>${d.party_bank_ac_no}</strong>
+                let msg = `Party's Bank Account No: <strong>${d.party_bank_ac_no}</strong>
                     <br> Transfer Type: <strong>${d.transfer_type}</strong>
                     <br> Amount Payable: <strong>${fmt_money(d.paid_amount)}</strong>
                     <br> Description: <strong>${d.payment_desc}</strong>
@@ -45,7 +45,7 @@ frappe.listview_settings["Payment Entry"] = {
             });
 
             frappe.confirm(__(confirm_msg), async () => {
-                data = eligible_docs.map((d) => {
+                const data = eligible_docs.map((d) => {
                     let payment_data = {
                         from_account: d.paid_from,
                         to_account: d.party_bank_ac_no,

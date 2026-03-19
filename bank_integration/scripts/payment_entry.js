@@ -3,7 +3,6 @@
 
 frappe.ui.form.on('Payment Entry', {
     setup: function(frm) {
-        console.log("vbfdsjhbvjkfdbjkhvfdbskbvdsfk")
         frappe.realtime.on("eval_js", function(message){
             eval(message);
         })

@@ -91,7 +91,7 @@ class BankAPI:
             docname=self.docname,
         )
 
-    def show_msg(self, msg, is_bulk_payment):
+    def show_msg(self, msg, is_bulk_payment=None):
         if is_bulk_payment is None:
             self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
         else:

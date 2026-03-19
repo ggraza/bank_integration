@@ -221,9 +221,6 @@ class HDFCBankAPI(BankAPI):
         self.save_for_later()
 
     def process_security_questions(self):
-        bulk = ""
-        if self.bulk_payments is not None:
-            bulk = "_bulk"
         frappe.publish_realtime(
             "get_bank_answers",
             {
@@ -347,7 +344,7 @@ class HDFCBankAPI(BankAPI):
         self.logged_in = 1
 
         if self.doctype == "Bank Integration Settings":
-            self.show_msg("Credentials verified successfully!")
+            self.show_msg("Credentials verified successfully!",self.bulk_payments)
             self.emit_js("setTimeout(() => {frappe.hide_msgprint()}, 2000);")
             self.logout()
         elif self.doctype == "Payment Entry":

@@ -204,6 +204,7 @@ custom_fields = {
                 && doc.transfer_type=='Transfer to other bank (NEFT)')",
             'insert_after': 'transfer_type',
             'print_hide': 1,
+            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -215,6 +216,7 @@ custom_fields = {
                 && doc.comm_type=='Email')",
             'insert_after': 'comm_type',
             'print_hide': 1,
+            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -226,6 +228,7 @@ custom_fields = {
                 && doc.comm_type=='Mobile')",
             'insert_after': 'comm_email',
             'print_hide': 1,
+            'in_list_view':1,
             'permlevel': 7
         },
         {
