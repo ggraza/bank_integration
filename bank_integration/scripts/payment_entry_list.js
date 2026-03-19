@@ -59,12 +59,8 @@ frappe.listview_settings["Payment Entry"] = {
                             ? d.comm_value.trim().replace(" ", "")
                             : "",
                     };
-                    let uid = frappe.utils.get_random(7);
-                    let docname = d.name;
                     return {
                         data: payment_data,
-                        // uid,
-                        // docname,
                     };
                 });
 
@@ -73,7 +69,6 @@ frappe.listview_settings["Payment Entry"] = {
                     args: { data },
                 });
 
-                listview.refresh();
             });
         });
 

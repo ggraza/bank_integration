@@ -607,6 +607,7 @@ class HDFCBankAPI(BankAPI):
         confirm_btn.click()
         self._handle_post_confirm_payment_state()
 
+    @set_correct_payment_data
     def make_neft_payment(self):
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
