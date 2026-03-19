@@ -18,3 +18,19 @@ def make_payment(docname, uid, data):
 
     bank = get_bank_api(bi.bank_name, bi.username, bi.get_password(), doctype="Payment Entry", docname=docname,
         uid=uid, data=data)
+
+@frappe.whitelist()
+def make_bulk_payment(data):
+    bulk_data=json.loads(data)
+    data_converted_to_frappe_dict=[]
+    for d in bulk_data:
+        frappe_dict_d = frappe._dict(d)
+        frappe_dict_data=frappe._dict(frappe_dict_d.data)
+
+        bi_name = frappe.db.get_value('Bank Account', {'account': frappe_dict_data.from_account}, 'name')
+        bi = frappe.get_doc('Bank Integration Settings', bi_name)
+        frappe_dict_data.from_account = bi.bank_account_no
+        data_converted_to_frappe_dict.append(frappe_dict_data)
+    # not using changed data
+    bank = get_bank_api(bi.bank_name, bi.username, bi.get_password(), doctype="Payment Entry", 
+         bulk_payments=data_converted_to_frappe_dict)

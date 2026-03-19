@@ -27,6 +27,7 @@ class BankAPI:
         uid=None,
         resume=False,
         data=None,
+        bulk_payments=None,
     ):
         self.username = username
         self.password = password
@@ -37,6 +38,8 @@ class BankAPI:
         self.uid = uid or frappe.utils.random_string(7)
         self.cache_key = "bank_" + self.uid
         self.data = data
+        self.bulk_payments = bulk_payments
+        self.remove_payment = True
         
 
         if getattr(self, "init"):
@@ -79,6 +82,7 @@ class BankAPI:
 
     def emit_js(self, js):
         js = "if (cur_frm && cur_frm._uid === '{0}') {{ {1} }}".format(self.uid, js)
+
         frappe.publish_realtime(
             "eval_js",
             js,
@@ -87,8 +91,18 @@ class BankAPI:
             docname=self.docname,
         )
 
-    def show_msg(self, msg):
-        self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
+    def show_msg(self, msg, is_bulk_payment):
+        if is_bulk_payment is None:
+            self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
+        else:
+            js = "frappe.update_msgprint(`{0}`);".format(msg)
+            frappe.publish_realtime(
+                "eval_js_bulk",
+                js,
+                user=frappe.session.user,
+                doctype=self.doctype,
+                docname=self.docname,
+            )
 
     def get_resume_info(self):
         return {
@@ -102,6 +116,8 @@ class BankAPI:
             self.throw("Unable to find session info in cache")
 
         self.data = frappe._dict(cached["data"] or {})
+        if "bulk_data" in cached:
+            self.bulk_payments = cached["bulk_data"]
         resume_info = frappe._dict(cached["resume_info"])
 
         self.br = webdriver.Remote(
@@ -176,12 +192,22 @@ class BankAPI:
         frappe.throw(message)
 
     def save_for_later(self):
-        frappe.cache().set_value(
-            self.cache_key,
-            {"resume_info": self.get_resume_info(), "data": self.data},
-            user=frappe.session.user,
-        )
-
+        if self.bulk_payments is None:
+            frappe.cache().set_value(
+                self.cache_key,
+                {"resume_info": self.get_resume_info(), "data": self.data},
+                user=frappe.session.user,
+            )
+        else:
+            frappe.cache().set_value(
+                self.cache_key,
+                {
+                    "resume_info": self.get_resume_info(),
+                    "data": self.data,
+                    "bulk_data": self.bulk_payments,
+                },
+                user=frappe.session.user,
+            )
         setattr(bank_integration, self.cache_key, self)
 
     def delete_cache(self):
