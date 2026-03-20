@@ -655,12 +655,7 @@ class HDFCBankAPI(BankAPI):
 
         try:
             self.br.switch_to.default_content()
-
-            if self.data.transfer_type == "Transfer within the bank":
-                self.get_element("span.success-tick", "css_selector", throw=False)
-
-            elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-                self.get_element("span.success-tick", "css_selector", throw=False)
+            self.get_element("span.success-tick", "css_selector", throw=False)
 
         except TimeoutException:
             self.throw(
