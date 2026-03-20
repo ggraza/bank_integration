@@ -750,6 +750,7 @@ class HDFCBankAPI(BankAPI):
         payment_entry_doc.online_payment_status = "Paid"
         payment_entry_doc.reference_no = ref_no
         payment_entry_doc.submit()
+        frappe.db.commit()
 
         if self.is_bulk_payments:
             if getattr(self, "bulk_payments", None):
@@ -774,7 +775,6 @@ class HDFCBankAPI(BankAPI):
                     docname=self.docname,
                 )
 
-        frappe.db.commit()
         self.logout()
 
     def fetch_transactions(self, from_date=None):

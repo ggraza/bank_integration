@@ -11,6 +11,9 @@ frappe.listview_settings["Payment Entry"] = {
         "paid_from",
     ],
     onload(listview) {
+        frappe.realtime.off("eval_js");
+        frappe.realtime.off("payment_success_bulk");
+
         frappe.realtime.on("eval_js", function (message) {
             eval(message);
         });

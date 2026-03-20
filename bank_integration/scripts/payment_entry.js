@@ -3,7 +3,10 @@
 
 frappe.ui.form.on("Payment Entry", {
     setup: function (frm) {
-        // Realtime listener handled via list view only now.
+        frappe.realtime.off("eval_js");
+        frappe.realtime.on("eval_js", function (message) {
+            eval(message);
+        });
     },
 
     onload: function (frm) {
@@ -20,6 +23,8 @@ frappe.ui.form.on("Payment Entry", {
             e.preventDefault();
             return false;
         });
+
+        frappe.realtime.off("payment_success");
 
         frappe.realtime.on("payment_success", function (data) {
             if (data.uid != frm._uid || frm.success_action_started) {
