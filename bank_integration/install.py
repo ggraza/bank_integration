@@ -133,7 +133,6 @@ custom_fields = {
                 && doc.party)",
             'insert_after': 'bank_payment_section',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -144,7 +143,6 @@ custom_fields = {
             'depends_on': "eval:doc.pay_now",
             'insert_after': 'pay_now',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -154,7 +152,6 @@ custom_fields = {
             'depends_on': "eval:doc.pay_now",
             'insert_after': 'party_bank',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -165,7 +162,6 @@ custom_fields = {
             'depends_on': "eval:(doc.pay_now && doc.creation)",
             'insert_after': 'party_bank_ac_no',
             'print_hide': 1,
-            'in_list_view':1,
             'read_only': 1,
             'permlevel': 7
         },
@@ -181,7 +177,6 @@ custom_fields = {
             'depends_on': "eval:doc.pay_now",
             'insert_after': 'bank_payment_cb',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -192,7 +187,6 @@ custom_fields = {
             'depends_on': "eval:doc.pay_now",
             'insert_after': 'payment_desc',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -204,7 +198,6 @@ custom_fields = {
                 && doc.transfer_type=='Transfer to other bank (NEFT)')",
             'insert_after': 'transfer_type',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -216,7 +209,6 @@ custom_fields = {
                 && doc.comm_type=='Email')",
             'insert_after': 'comm_type',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {
@@ -228,7 +220,6 @@ custom_fields = {
                 && doc.comm_type=='Mobile')",
             'insert_after': 'comm_email',
             'print_hide': 1,
-            'in_list_view':1,
             'permlevel': 7
         },
         {

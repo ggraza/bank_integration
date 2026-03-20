@@ -17,9 +17,6 @@ def set_correct_payment_data(func):
 
         self.data = data
 
-        try:
-            return func(self, *args, **kwargs)
-        except Exception:
-            self.throw("Some internal error")
+        return func(self, *args, **kwargs)
 
     return wrapper

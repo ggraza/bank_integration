@@ -6,7 +6,7 @@ bi.listenForOtp = function (frm,is_bulk=false) {
 	if(!frm?.docname){
 		bulk="_bulk"
 	}
-	frappe.realtime.on("get_bank_otp"+bulk, function(data){
+	frappe.realtime.on("get_bank_otp" + bulk, function(data){
 
 		if (!is_bulk && (!frm || data.uid != frm._uid || frm.otp_requested)) return;
 

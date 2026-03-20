@@ -27,7 +27,7 @@ class HDFCBankAPI(BankAPI):
         self.bank_name = "HDFC Bank"
 
     def login(self):
-        self.show_msg("Attempting login...", self.bulk_payments)
+        self.show_msg("Attempting login...", self.is_bulk_payments)
         self.setup_browser()
         self.br.get("https://netbanking.hdfcbank.com/netbanking/")
 
@@ -201,8 +201,10 @@ class HDFCBankAPI(BankAPI):
             except Exception:
                 pass
 
+        # here both listeners for list and form view and kept separate as they require
+        # cur_list and cur_frm respectively
         bulk = ""
-        if self.bulk_payments is not None:
+        if self.is_bulk_payments:
             bulk = "_bulk"
 
         frappe.publish_realtime(
@@ -344,20 +346,12 @@ class HDFCBankAPI(BankAPI):
         self.logged_in = 1
 
         if self.doctype == "Bank Integration Settings":
-            self.show_msg("Credentials verified successfully!",self.bulk_payments)
+            self.show_msg("Credentials verified successfully!", self.bulk_payments)
             self.emit_js("setTimeout(() => {frappe.hide_msgprint()}, 2000);")
             self.logout()
         elif self.doctype == "Payment Entry":
-            if self.bulk_payments:
-                self.show_msg(
-                    "Login Successful! Processing payments..", self.bulk_payments
-                )
-                self.make_payment()
-            else:
-                self.show_msg(
-                    "Login Successful! Processing payment..", self.bulk_payments
-                )
-                self.make_payment()
+            self.show_msg("Login Successful! Processing payment..", self.bulk_payments)
+            self.make_payment()
         elif self.doctype == "Bank Account":
             self.fetch_transactions()
 
@@ -690,22 +684,14 @@ class HDFCBankAPI(BankAPI):
         details_button = self.get_element("showHideBtn", "id")
         details_button.click()
 
-        if self.data.docname:
-            save_file(
-                self.data.docname + " Online Payment Screenshot.png",
-                self.br.get_screenshot_as_png(),
-                self.data.doctype,
-                self.data.docname,
-                is_private=1,
-            )
-        else:
-            save_file(
-                self.docname + " Online Payment Screenshot.png",
-                self.br.get_screenshot_as_png(),
-                self.doctype,
-                self.docname,
-                is_private=1,
-            )
+        save_file(
+            self.data.docname + " Online Payment Screenshot.png",
+            self.br.get_screenshot_as_png(),
+            "Payment Entry",
+            self.data.docname,
+            is_private=1,
+        )
+
         ref_no = "-"
         if self.data.transfer_type == "Transfer within the bank":
             try:
@@ -733,32 +719,39 @@ class HDFCBankAPI(BankAPI):
             except Exception:
                 pass
 
-        if self.bulk_payments is None:
+        # these are kept separate as one requires frm object which is not present in list view
+        if not self.is_bulk_payments:
             frappe.publish_realtime(
                 "payment_success",
-                {"ref_no": ref_no, "uid": self.uid},
-                user=frappe.session.user,
-                doctype="Payment Entry",
-                docname=self.docname,
-            )
-            self.remove_payment = True
-
-        else:
-            frappe.publish_realtime(
-                "payment_success_bulk",
-                {"ref_no": ref_no, "uid": self.uid, "paid_amount": self.data.amount,"docname":self.data.docname},
+                {
+                    "ref_no": ref_no,
+                    "uid": self.uid,
+                },
                 user=frappe.session.user,
                 doctype="Payment Entry",
                 docname=self.data.docname,
             )
-            self.remove_payment = True
+        else:
+            frappe.publish_realtime(
+                "payment_success_bulk",
+                {
+                    "ref_no": ref_no,
+                    "uid": self.uid,
+                    "paid_amount": self.data.amount,
+                    "docname": self.data.docname,
+                },
+                user=frappe.session.user,
+                doctype="Payment Entry",
+                docname=self.data.docname,
+            )
 
-            payment_entry_doc = frappe.get_doc("Payment Entry", self.data.docname)
-            payment_entry_doc.remarks = ""
-            payment_entry_doc.online_payment_status = "Paid"
-            payment_entry_doc.reference_no = ref_no
-            payment_entry_doc.submit()
+        self.remove_payment = True
+        payment_entry_doc = frappe.get_doc("Payment Entry", self.data.docname)
+        payment_entry_doc.online_payment_status = "Paid"
+        payment_entry_doc.reference_no = ref_no
+        payment_entry_doc.submit()
 
+        if self.is_bulk_payments:
             if getattr(self, "bulk_payments", None):
                 send_money_btn = self.get_element(
                     "//button[normalize-space(text())='Go to Send Money' and contains(@class, 'btn-primary')]",
@@ -770,15 +763,17 @@ class HDFCBankAPI(BankAPI):
                 return
             else:
                 self.show_msg("All Payments are completed", self.bulk_payments)
-                js = "setTimeout(()=>{frappe.hide_msgprint(); cur_list.refresh();cur_list.clear_checked_items();},4000);"
+                js = "if(cur_list && cur_list._uid=={0}){setTimeout(()=>{frappe.hide_msgprint(); cur_list.refresh();cur_list.clear_checked_items();},4000);}".format(
+                    self.uid
+                )
                 frappe.publish_realtime(
-                    "eval_js_bulk",
+                    "eval_js",
                     js,
                     user=frappe.session.user,
                     doctype=self.doctype,
                     docname=self.docname,
                 )
-        
+
         frappe.db.commit()
         self.logout()
 

@@ -1,18 +1,28 @@
-
-
 frappe.listview_settings["Payment Entry"] = {
+    add_fields: [
+        "party_name",
+        "comm_mobile",
+        "comm_email",
+        "comm_type",
+        "transfer_type",
+        "payment_type",
+        "payment_desc",
+        "online_payment_status",
+        "party_bank_ac_no",
+        "party_bank",
+        "pay_now",
+        "paid_from",
+    ],
     onload(listview) {
-        frappe.realtime.on("eval_js_bulk", function (message) {
+        frappe.realtime.on("eval_js", function (message) {
             eval(message);
         });
         bi.listenForOtp(listview, true);
-        listview.page.add_action_item(__("Process Bulk Payments"), async () => {
+        listview.page.add_action_item("Process Bulk Payments", async () => {
             const selected_docs = listview.get_checked_items();
 
             if (!selected_docs.length) {
-                frappe.msgprint(
-                    __("Please select at least one Payment Entry."),
-                );
+                frappe.msgprint("Please select at least one Payment Entry.");
                 return;
             }
 
@@ -27,9 +37,7 @@ frappe.listview_settings["Payment Entry"] = {
 
             if (!eligible_docs.length) {
                 frappe.msgprint(
-                    __(
-                        "No eligible rows found. Select unpaid draft Pay entries with Pay Now enabled.",
-                    ),
+                    "No eligible rows found. Select unpaid draft Pay entries with Pay Now enabled.",
                 );
                 return;
             }
@@ -37,6 +45,7 @@ frappe.listview_settings["Payment Entry"] = {
             let confirm_msg = `Are you sure you want to proceed with ${eligible_docs.length > 1 ? "these" : "this"} ${eligible_docs.length} payments?<br><br>`;
             eligible_docs.map((d, idx) => {
                 let msg = `Party's Bank Account No: <strong>${d.party_bank_ac_no}</strong>
+                    <br> Party's Name: <strong>${d.party_name}</strong>
                     <br> Transfer Type: <strong>${d.transfer_type}</strong>
                     <br> Amount Payable: <strong>${fmt_money(d.paid_amount)}</strong>
                     <br> Description: <strong>${d.payment_desc}</strong>
@@ -44,7 +53,8 @@ frappe.listview_settings["Payment Entry"] = {
                 confirm_msg += msg;
             });
 
-            frappe.confirm(__(confirm_msg), async () => {
+            listview._uid = frappe.utils.get_random(7);
+            frappe.confirm(confirm_msg, async () => {
                 const data = eligible_docs.map((d) => {
                     let payment_data = {
                         from_account: d.paid_from,
@@ -66,9 +76,8 @@ frappe.listview_settings["Payment Entry"] = {
 
                 await frappe.call({
                     method: "bank_integration.bank_integration.api.payments.make_bulk_payment",
-                    args: { data },
+                    args: { data, uid: listview._uid },
                 });
-
             });
         });
 

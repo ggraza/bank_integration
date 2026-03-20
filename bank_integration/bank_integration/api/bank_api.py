@@ -40,7 +40,10 @@ class BankAPI:
         self.data = data
         self.bulk_payments = bulk_payments
         self.remove_payment = True
-        
+        if bulk_payments is None:
+            self.is_bulk_payments = False
+        else:
+            self.is_bulk_payments = True
 
         if getattr(self, "init"):
             self.init()
@@ -58,7 +61,8 @@ class BankAPI:
 
     def setup_browser(self):
         from selenium.webdriver.remote.remote_connection import RemoteConnection
-        if not isinstance(RemoteConnection._timeout, (int, float)) :
+
+        if not isinstance(RemoteConnection._timeout, (int, float)):
             RemoteConnection.set_timeout(90)
         self.br = webdriver.Chrome(options=self.get_options())
 
@@ -81,7 +85,9 @@ class BankAPI:
         return options
 
     def emit_js(self, js):
-        js = "if (cur_frm && cur_frm._uid === '{0}') {{ {1} }}".format(self.uid, js)
+        js = "if ((cur_frm && cur_frm._uid === '{0}') || (cur_list && cur_list._uid === '{0}')) {{ {1} }}".format(
+            self.uid, js
+        )
 
         frappe.publish_realtime(
             "eval_js",
@@ -91,18 +97,9 @@ class BankAPI:
             docname=self.docname,
         )
 
-    def show_msg(self, msg, is_bulk_payment=None):
-        if is_bulk_payment is None:
-            self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
-        else:
-            js = "frappe.update_msgprint(`{0}`);".format(msg)
-            frappe.publish_realtime(
-                "eval_js_bulk",
-                js,
-                user=frappe.session.user,
-                doctype=self.doctype,
-                docname=self.docname,
-            )
+    def show_msg(self, msg, is_bulk_payments=None):
+        # Always publish to the standard eval_js event, list view listener handles the message.
+        self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
 
     def get_resume_info(self):
         return {
@@ -116,13 +113,18 @@ class BankAPI:
             self.throw("Unable to find session info in cache")
 
         self.data = frappe._dict(cached["data"] or {})
+
         if "bulk_data" in cached:
             self.bulk_payments = cached["bulk_data"]
+        if "is_bulk_payments" in cached:
+            self.is_bulk_payments = cached["is_bulk_payments"]
+
         resume_info = frappe._dict(cached["resume_info"])
 
         self.br = webdriver.Remote(
             command_executor=resume_info.executor_url, options=self.get_options()
         )
+
         self.br.close()
         self.br.session_id = resume_info.session_id
 
@@ -192,7 +194,7 @@ class BankAPI:
         frappe.throw(message)
 
     def save_for_later(self):
-        if self.bulk_payments is None:
+        if not self.is_bulk_payments:
             frappe.cache().set_value(
                 self.cache_key,
                 {"resume_info": self.get_resume_info(), "data": self.data},
@@ -205,6 +207,7 @@ class BankAPI:
                     "resume_info": self.get_resume_info(),
                     "data": self.data,
                     "bulk_data": self.bulk_payments,
+                    "is_bulk_payments": self.is_bulk_payments,
                 },
                 user=frappe.session.user,
             )
