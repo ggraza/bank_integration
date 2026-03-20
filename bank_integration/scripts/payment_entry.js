@@ -374,7 +374,9 @@ function set_transfer_type(frm) {
             "Transfer to other bank (IMPS)",
             ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : [])
             ].join("\n"));
-            frm.set_value('transfer_type','Transfer to other bank (NEFT)')
+            if(frm.doc.transfer_type=="Transfer within the bank"){
+                frm.set_value('transfer_type','Transfer to other bank (NEFT)')
+            }
             frm.refresh_field("transfer_type");
         }
     } else {
