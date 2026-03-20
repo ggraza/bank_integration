@@ -1,9 +1,6 @@
 frappe.listview_settings["Payment Entry"] = {
     add_fields: [
         "party_name",
-        "comm_mobile",
-        "comm_email",
-        "comm_type",
         "transfer_type",
         "payment_type",
         "payment_desc",
@@ -62,12 +59,8 @@ frappe.listview_settings["Payment Entry"] = {
                         transfer_type: d.transfer_type,
                         amount: d.paid_amount,
                         payment_desc: d.payment_desc,
-                        comm_type: d.comm_type,
                         docname: d.name,
                         doctype: "Payment Entry",
-                        comm_value: d.comm_value
-                            ? d.comm_value.trim().replace(" ", "")
-                            : "",
                     };
                     return {
                         data: payment_data,
@@ -82,6 +75,7 @@ frappe.listview_settings["Payment Entry"] = {
         });
 
         frappe.realtime.on("payment_success_bulk", function (data) {
+            if (!listview && listview._uid !== data.uid) return;
             frappe.update_msgprint(`Payment completed for the following Payment Entry:<br>
             <strong>Payment Entry ID:</strong> ${data.docname}<br>
             <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>

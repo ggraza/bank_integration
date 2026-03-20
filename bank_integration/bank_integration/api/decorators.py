@@ -6,7 +6,7 @@ def set_correct_payment_data(func):
     def wrapper(self, *args, **kwargs):
         if getattr(self, "bulk_payments", None):
             if self.remove_payment:
-                data = _dict(self.bulk_payments.pop())
+                data = _dict(self.bulk_payments.pop(0))
             else:
                 data = self.data
         else:

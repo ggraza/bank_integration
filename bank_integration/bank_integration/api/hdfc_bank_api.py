@@ -763,7 +763,7 @@ class HDFCBankAPI(BankAPI):
                 return
             else:
                 self.show_msg("All Payments are completed", self.bulk_payments)
-                js = "if(cur_list && cur_list._uid=={0}){setTimeout(()=>{frappe.hide_msgprint(); cur_list.refresh();cur_list.clear_checked_items();},4000);}".format(
+                js = "if(cur_list && cur_list._uid=='{0}'){setTimeout(()=>{frappe.hide_msgprint(); cur_list.refresh();cur_list.clear_checked_items();},4000);}".format(
                     self.uid
                 )
                 frappe.publish_realtime(

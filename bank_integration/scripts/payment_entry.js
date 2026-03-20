@@ -159,12 +159,6 @@ frappe.ui.form.on("Payment Entry", {
 
         if (frm.doc.docstatus === 0 && !frm.doc.__unsaved) {
             if (frm.doc.pay_now && frm.doc.online_payment_status == "Unpaid") {
-                var comm_value = "";
-                if (frm.doc.comm_type == "Email") {
-                    comm_value = frm.doc.comm_email;
-                } else if (frm.doc.comm_type == "Mobile") {
-                    comm_value = frm.doc.comm_mobile;
-                }
 
                 frm.add_custom_button(__("Make Online Payment"), function () {
                     frappe.confirm(
@@ -181,10 +175,6 @@ frappe.ui.form.on("Payment Entry", {
                                 transfer_type: frm.doc.transfer_type,
                                 amount: frm.doc.paid_amount,
                                 payment_desc: frm.doc.payment_desc,
-                                comm_type: frm.doc.comm_type,
-                                comm_value: comm_value
-                                    ? comm_value.trim().replace(" ", "")
-                                    : "",
                             };
 
                             frappe.call({
