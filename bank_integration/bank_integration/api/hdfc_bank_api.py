@@ -718,6 +718,13 @@ class HDFCBankAPI(BankAPI):
             except Exception:
                 pass
 
+        self.remove_payment = True
+        payment_entry_doc = frappe.get_doc("Payment Entry", self.data.docname)
+        payment_entry_doc.online_payment_status = "Paid"
+        payment_entry_doc.reference_no = ref_no
+        payment_entry_doc.submit()
+        frappe.db.commit()
+
         # these are kept separate as one requires frm object which is not present in list view
         if not self.is_bulk_payments:
             frappe.publish_realtime(
@@ -743,13 +750,6 @@ class HDFCBankAPI(BankAPI):
                 doctype="Payment Entry",
                 docname=self.data.docname,
             )
-
-        self.remove_payment = True
-        payment_entry_doc = frappe.get_doc("Payment Entry", self.data.docname)
-        payment_entry_doc.online_payment_status = "Paid"
-        payment_entry_doc.reference_no = ref_no
-        payment_entry_doc.submit()
-        frappe.db.commit()
 
         if self.is_bulk_payments:
             if getattr(self, "bulk_payments", None):
