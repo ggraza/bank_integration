@@ -3,7 +3,7 @@ frappe.provide("modifyMethod");
 
 bi.listenForOtp = function (frm,is_bulk=false) {
 	let bulk=""
-	if(!frm?.docname){
+	if(is_bulk){
 		bulk="_bulk"
 	}
 	frappe.realtime.on("get_bank_otp" + bulk, function(data){

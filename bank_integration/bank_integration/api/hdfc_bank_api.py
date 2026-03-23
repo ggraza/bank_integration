@@ -758,7 +758,10 @@ class HDFCBankAPI(BankAPI):
                     "xpath",
                     now=True,
                 )
-                self.br.execute_script("arguments[0].click();", send_money_btn)
+                if send_money_btn:
+                    self.br.execute_script("arguments[0].click();", send_money_btn)
+                else:
+                    self.throw("Send Money button not found.")
                 self.make_payment()
                 return
             else:
