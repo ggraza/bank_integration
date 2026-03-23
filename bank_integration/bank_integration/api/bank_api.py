@@ -97,8 +97,7 @@ class BankAPI:
             docname=self.docname,
         )
 
-    def show_msg(self, msg, is_bulk_payments=None):
-        # Always publish to the standard eval_js event, list view listener handles the message.
+    def show_msg(self, msg):
         self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
 
     def get_resume_info(self):

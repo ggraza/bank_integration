@@ -27,7 +27,7 @@ class HDFCBankAPI(BankAPI):
         self.bank_name = "HDFC Bank"
 
     def login(self):
-        self.show_msg("Attempting login...", self.is_bulk_payments)
+        self.show_msg("Attempting login...")
         self.setup_browser()
         self.br.get("https://netbanking.hdfcbank.com/netbanking/")
 
@@ -346,11 +346,11 @@ class HDFCBankAPI(BankAPI):
         self.logged_in = 1
 
         if self.doctype == "Bank Integration Settings":
-            self.show_msg("Credentials verified successfully!", self.bulk_payments)
+            self.show_msg("Credentials verified successfully!")
             self.emit_js("setTimeout(() => {frappe.hide_msgprint()}, 2000);")
             self.logout()
         elif self.doctype == "Payment Entry":
-            self.show_msg("Login Successful! Processing payment..", self.bulk_payments)
+            self.show_msg("Login Successful! Processing payment..")
             self.make_payment()
         elif self.doctype == "Bank Account":
             self.fetch_transactions()
@@ -372,8 +372,7 @@ class HDFCBankAPI(BankAPI):
                 time.sleep(1)
             except Exception:
                 self.show_msg(
-                    "We were unable to complete the logout process on the bank website. Please manually log out from your online banking account to end the session safely.",
-                    self.bulk_payments,
+                    "We were unable to complete the logout process on the bank website. Please manually log out from your online banking account to end the session safely."
                 )
         self.delete_cache()
         self.br.quit()
@@ -452,7 +451,7 @@ class HDFCBankAPI(BankAPI):
             if last4 and (last4 in selected_text.replace(" ", "")):
                 return
 
-        self.show_msg("Selecting from account...", self.bulk_payments)
+        self.show_msg("Selecting from account...")
 
         account_stripped = self.data.from_account.strip().replace(" ", "")
         last4 = account_stripped[-4:]
@@ -763,10 +762,8 @@ class HDFCBankAPI(BankAPI):
                 self.make_payment()
                 return
             else:
-                self.show_msg("All Payments are completed", self.bulk_payments)
-                js = "if(cur_list && cur_list._uid=='{0}'){setTimeout(()=>{frappe.hide_msgprint(); cur_list.refresh();cur_list.clear_checked_items();},4000);}".format(
-                    self.uid
-                )
+                self.show_msg("All Payments are completed")
+                js = f"if (cur_list && cur_list._uid === '{self.uid}') setTimeout(() => {{ frappe.hide_msgprint(); cur_list.refresh(); cur_list.clear_checked_items(); }}, 4000);"
                 frappe.publish_realtime(
                     "eval_js",
                     js,
