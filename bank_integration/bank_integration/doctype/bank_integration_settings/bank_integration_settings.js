@@ -12,7 +12,10 @@ frappe.ui.form.on('Bank Integration Settings', {
 		bi.listenForQuestions(frm);
 	},
 	async validate(frm) {
-
+		let n=1
+		if(frm.docname.includes("new-bank-integration-settings")){
+			n=0
+		}
 		frm._uid = frappe.utils.get_random(7);
 		let bank_integrations = await frappe.db.get_list(
 			"Bank Integration Settings",
@@ -21,7 +24,7 @@ frappe.ui.form.on('Bank Integration Settings', {
 				filters: { bank_account: frm.doc.bank_account }
 			}
 		);
-		if (bank_integrations.length > 0) {
+		if (bank_integrations.length > n) {
 			frappe.throw(__("Only one Bank Integration for a bank account can exist."));
 		}
 		frm.call("check_credentials", { uid: frm._uid });

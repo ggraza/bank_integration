@@ -13,6 +13,7 @@ frappe.listview_settings["Payment Entry"] = {
     onload(listview) {
         frappe.realtime.off("eval_js");
         frappe.realtime.off("payment_success_bulk");
+        frappe.realtime.off("get_bank_otp_bulk");
 
         frappe.realtime.on("eval_js", function (message) {
             eval(message);
@@ -55,24 +56,13 @@ frappe.listview_settings["Payment Entry"] = {
 
             listview._uid = frappe.utils.get_random(7);
             frappe.confirm(confirm_msg, async () => {
-                const data = eligible_docs.map((d) => {
-                    let payment_data = {
-                        from_account: d.paid_from,
-                        to_account: d.party_bank_ac_no,
-                        transfer_type: d.transfer_type,
-                        amount: d.paid_amount,
-                        payment_desc: d.payment_desc,
-                        docname: d.name,
-                        doctype: "Payment Entry",
-                    };
-                    return {
-                        data: payment_data,
-                    };
+                const docname_list = eligible_docs.map((d) => {
+                    return d.name;
                 });
 
                 await frappe.call({
                     method: "bank_integration.bank_integration.api.payments.make_bulk_payment",
-                    args: { data, uid: listview._uid },
+                    args: { docname_list, uid: listview._uid },
                 });
             });
         });

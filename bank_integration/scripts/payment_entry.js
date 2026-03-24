@@ -10,6 +10,9 @@ frappe.ui.form.on("Payment Entry", {
     },
 
     onload: function (frm) {
+        frappe.realtime.off("get_bank_otp");
+        frappe.realtime.off("get_bank_answers");
+        
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);
 
@@ -54,8 +57,8 @@ frappe.ui.form.on("Payment Entry", {
                     setup_sms(frm);
                     if (frm.sms_link) frm.sms_link.click();
                 }
+                delete frm.success_action_started;
             }, 1000);
-            delete frm.success_action_started;
         });
     },
 
@@ -175,20 +178,12 @@ frappe.ui.form.on("Payment Entry", {
                     <br> Description: <strong>${frm.doc.payment_desc}</strong>`,
                         function () {
                             frm._uid = frappe.utils.get_random(7);
-                            let payment_data = {
-                                from_account: frm.doc.paid_from,
-                                to_account: frm.doc.party_bank_ac_no,
-                                transfer_type: frm.doc.transfer_type,
-                                amount: frm.doc.paid_amount,
-                                payment_desc: frm.doc.payment_desc,
-                            };
 
                             frappe.call({
                                 method: "bank_integration.bank_integration.api.payments.make_payment",
                                 args: {
                                     docname: frm.doc.name,
                                     uid: frm._uid,
-                                    data: payment_data,
                                 },
                             });
                         },
