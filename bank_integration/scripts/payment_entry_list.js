@@ -28,6 +28,11 @@ frappe.listview_settings["Payment Entry"] = {
                 return;
             }
 
+            if(selected_docs.length > 500){
+                frappe.msgprint("You can process a maximum of 500 Payment Entries at once. Please select fewer entries and try again.");
+                return;
+            }
+
             const eligible_docs = selected_docs.filter((d) => {
                 return (
                     cint(d.docstatus) === 0 &&
