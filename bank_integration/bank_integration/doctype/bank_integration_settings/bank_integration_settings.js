@@ -3,8 +3,29 @@
 
 frappe.ui.form.on('Bank Integration Settings', {
 	setup(frm) {
-		frappe.realtime.on("eval_js", function(message){
-			eval(message);
+		frappe.realtime.on("bi_action", function(data){
+			switch(data.action){
+				case "show_message":
+                    if(frm && frm._uid == data.uid){
+                        frappe.update_msgprint(data.message);
+                    }
+                    break;
+				case "login_success":
+					if(frm._uid == data.uid){
+						setTimeout(() => {
+							frappe.hide_msgprint();
+						}, 2000);
+					}
+					break;
+				case "reload_doc":
+                    if(frm && frm._uid == data.uid){
+                        if (frm.docname == data.docname) {
+							frappe.hide_msgprint()
+                            frm.reload_doc();
+                        }
+                    }
+                    break;
+			}
 		});
 	},
 	onload(frm) {

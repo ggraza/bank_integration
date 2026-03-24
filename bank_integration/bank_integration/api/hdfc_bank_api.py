@@ -36,8 +36,11 @@ class HDFCBankAPI(BankAPI):
         cust_id.send_keys(self.username, Keys.ENTER)
 
         self.br.switch_to.default_content()
-        pass_input = self.get_element("password", "id")
-
+        pass_input = self.get_element("password", "id", timeout=10,throw="ignore")
+        if pass_input is None:
+            self.throw(
+                "Credentials are incorrect. Please verify the username & password in Bank Integration Settings."
+            )
         pass_input.send_keys(self.password, Keys.ENTER)
 
         self.br.switch_to.default_content()
@@ -347,7 +350,13 @@ class HDFCBankAPI(BankAPI):
 
         if self.doctype == "Bank Integration Settings":
             self.show_msg("Credentials verified successfully!")
-            self.emit_js("setTimeout(() => {frappe.hide_msgprint()}, 2000);")
+            frappe.publish_realtime(
+                "bi_action",
+                {"uid": self.uid, "action": "login_success"},
+                user=frappe.session.user,
+                doctype=self.doctype,
+                docname=self.docname,
+            )
             self.logout()
         elif self.doctype == "Payment Entry":
             self.show_msg("Login Successful! Processing payment..")
@@ -728,10 +737,11 @@ class HDFCBankAPI(BankAPI):
         # these are kept separate as one requires frm object which is not present in list view
         if not self.is_bulk_payments:
             frappe.publish_realtime(
-                "payment_success",
+                "bi_action",
                 {
                     "ref_no": ref_no,
                     "uid": self.uid,
+                    "action": "payment_success",
                 },
                 user=frappe.session.user,
                 doctype="Payment Entry",
@@ -739,12 +749,13 @@ class HDFCBankAPI(BankAPI):
             )
         else:
             frappe.publish_realtime(
-                "payment_success_bulk",
+                "bi_action",
                 {
                     "ref_no": ref_no,
                     "uid": self.uid,
                     "paid_amount": self.data.amount,
                     "docname": self.data.docname,
+                    "action": "payment_success_bulk",
                 },
                 user=frappe.session.user,
                 doctype="Payment Entry",
@@ -766,10 +777,12 @@ class HDFCBankAPI(BankAPI):
                 return
             else:
                 self.show_msg("All Payments are completed")
-                js = "if(cur_list && cur_list._uid=='{0}'){{setTimeout(()=>{{frappe.hide_msgprint(); cur_list.refresh();cur_list.clear_checked_items();}},4000);}}".format(self.uid)
                 frappe.publish_realtime(
-                    "eval_js",
-                    js,
+                    "bi_action",
+                    {
+                        "uid": self.uid,
+                        "action": "bulk_payment_completed",
+                    },
                     user=frappe.session.user,
                     doctype=self.doctype,
                     docname=self.docname,

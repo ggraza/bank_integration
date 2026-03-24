@@ -11,13 +11,45 @@ frappe.listview_settings["Payment Entry"] = {
         "paid_from",
     ],
     onload(listview) {
-        frappe.realtime.off("eval_js");
-        frappe.realtime.off("payment_success_bulk");
+        frappe.realtime.off("bi_action");
         frappe.realtime.off("get_bank_otp_bulk");
 
-        frappe.realtime.on("eval_js", function (message) {
-            eval(message);
-        });
+        frappe.realtime.on("bi_action", function (data) {
+            switch (data.action) {
+                case "bulk_payment_completed":
+                    if(listview && listview._uid == data.uid){
+                        setTimeout(() => {
+                            frappe.hide_msgprint();
+                            listview.refresh();
+                            listview.clear_checked_items();
+                        }, 4000);
+                    }
+                    break;
+                case "show_message":
+                    if(listview && listview._uid == data.uid){
+                        frappe.update_msgprint(data.message);
+                    }
+                    break;
+                case "reload_doc":
+                    if(listview && listview._uid == data.uid){
+				    		frappe.hide_msgprint()
+                            listview.refresh();
+                    }
+                    break;
+                case "payment_success_bulk":
+                    if (!listview || listview._uid !== data.uid) return;
+                        frappe.update_msgprint(`Payment completed for the following Payment Entry:<br>
+                        <strong>Payment Entry ID:</strong> ${data.docname}<br>
+                        <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>
+                        <strong>Payment Reference No.:</strong> ${data.ref_no}<br>
+                        <strong>Date:</strong> ${frappe.datetime.get_today()}<br>
+                        <strong>Payment Proof:</strong> You can find the payment proof attached within this Payment Entry document.<br><br>
+                        The payment note includes details of your invoices against which this payment was made.<br>
+                        Thank you for doing business with us. We look forward to your continued patronage in the future.<br>
+                        Proceeding to next payment...<br>`);
+                    break;
+                }
+        });         
         bi.listenForOtp(listview, true);
         listview.page.add_action_item("Process Bulk Payments", async () => {
             const selected_docs = listview.get_checked_items();
@@ -67,17 +99,5 @@ frappe.listview_settings["Payment Entry"] = {
             });
         });
 
-        frappe.realtime.on("payment_success_bulk", function (data) {
-            if (!listview || listview._uid !== data.uid) return;
-            frappe.update_msgprint(`Payment completed for the following Payment Entry:<br>
-            <strong>Payment Entry ID:</strong> ${data.docname}<br>
-            <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>
-            <strong>Payment Reference No.:</strong> ${data.ref_no}<br>
-            <strong>Date:</strong> ${frappe.datetime.get_today()}<br>
-            <strong>Payment Proof:</strong> You can find the payment proof attached within this Payment Entry document.<br><br>
-            The payment note includes details of your invoices against which this payment was made.<br>
-            Thank you for doing business with us. We look forward to your continued patronage in the future.<br>
-            Proceeding to next payment...<br>`);
-        });
     },
 };

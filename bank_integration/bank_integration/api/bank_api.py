@@ -84,21 +84,14 @@ class BankAPI:
 
         return options
 
-    def emit_js(self, js):
-        js = "if ((cur_frm && cur_frm._uid === '{0}') || (cur_list && cur_list._uid === '{0}')) {{ {1} }}".format(
-            self.uid, js
-        )
-
+    def show_msg(self, msg):
         frappe.publish_realtime(
-            "eval_js",
-            js,
+            "bi_action",
+            {"message": msg, "uid": self.uid, "action": "show_message"},
             user=frappe.session.user,
             doctype=self.doctype,
             docname=self.docname,
         )
-
-    def show_msg(self, msg):
-        self.emit_js("frappe.update_msgprint(`{0}`);".format(msg))
 
     def get_resume_info(self):
         return {
@@ -174,7 +167,6 @@ class BankAPI:
             raise
 
     def throw(self, message, screenshot=False):
-        js = "frappe.hide_msgprint();"
         if screenshot:
             save_file(
                 "payment_error_{}.png".format(self.uid),
@@ -185,10 +177,15 @@ class BankAPI:
             )
 
             frappe.db.commit()
-            js += " if (cur_frm) cur_frm.reload_doc();"
             message += " (See attached screenshot)"
 
-        self.emit_js(js)
+        frappe.publish_realtime(
+            "bi_action",
+            {"docname": self.docname, "uid": self.uid, "action": "reload_doc"},
+            user=frappe.session.user,
+            doctype=self.doctype,
+            docname=self.docname,
+        )
         self.logout()
         frappe.throw(message)
 

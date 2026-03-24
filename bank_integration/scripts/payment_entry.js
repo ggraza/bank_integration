@@ -3,9 +3,55 @@
 
 frappe.ui.form.on("Payment Entry", {
     setup: function (frm) {
-        frappe.realtime.off("eval_js");
-        frappe.realtime.on("eval_js", function (message) {
-            eval(message);
+        frappe.realtime.off("bi_action");
+        frappe.realtime.on("bi_action", function (data) {
+
+            switch (data.action) {
+                case "show_message":
+                    if(frm && frm._uid == data.uid){
+                        frappe.update_msgprint(data.message);
+                    }
+                    break;
+                case "reload_doc":
+                    if(frm && frm._uid == data.uid){
+                        if (frm.docname == data.docname) {
+                            frappe.hide_msgprint()
+                            frm.reload_doc();
+                        }
+                    }
+                    break;
+                case "payment_success":
+                    if (data.uid != frm._uid || frm.success_action_started) {
+                        return;
+                    }
+
+                    frm.success_action_started = true;
+                    frappe.update_msgprint("Payment successful!");
+                    setTimeout(function () {
+                        frappe.hide_msgprint();
+                        frm.doc.reference_no = data.ref_no;
+                        frm.refresh();
+                        if (frm.doc.comm_email) {
+                            let email_dialog = new frappe.views.CommunicationComposer({
+                                doc: frm.doc,
+                                frm: frm,
+                                subject: `Online Payment Processed (${frm.doc.name})`,
+                                recipients: frm.doc.comm_email,
+                                attach_document_print: true,
+                                message: `Hello,<br><br>
+                                        A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${frm.doc.reference_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
+                                        Feel free to get in touch with us if you have any queries or concerns.<br><br>
+                                        Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
+                            });
+                        
+                        } else {
+                            setup_sms(frm);
+                            if (frm.sms_link) frm.sms_link.click();
+                        }
+                        delete frm.success_action_started;
+                    }, 1000);
+                    break;
+            }
         });
     },
 
@@ -27,39 +73,6 @@ frappe.ui.form.on("Payment Entry", {
             return false;
         });
 
-        frappe.realtime.off("payment_success");
-
-        frappe.realtime.on("payment_success", function (data) {
-            if (data.uid != frm._uid || frm.success_action_started) {
-                return;
-            }
-
-            frm.success_action_started = true;
-            frappe.update_msgprint("Payment successful!");
-            setTimeout(function () {
-                frappe.hide_msgprint();
-                frm.doc.reference_no = data.ref_no;
-                frm.refresh();
-                if (frm.doc.comm_email) {
-                    let email_dialog = new frappe.views.CommunicationComposer({
-                        doc: frm.doc,
-                        frm: frm,
-                        subject: `Online Payment Processed (${frm.doc.name})`,
-                        recipients: frm.doc.comm_email,
-                        attach_document_print: true,
-                        message: `Hello,<br><br>
-                                A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${frm.doc.reference_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
-                                Feel free to get in touch with us if you have any queries or concerns.<br><br>
-                                Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
-                    });
-
-                } else {
-                    setup_sms(frm);
-                    if (frm.sms_link) frm.sms_link.click();
-                }
-                delete frm.success_action_started;
-            }, 1000);
-        });
     },
 
     payment_type: function (frm) {
