@@ -61,6 +61,10 @@ def make_payment(docname, uid):
 def make_bulk_payment(docname_list, uid):
 
     docname_list = json.loads(docname_list)
+
+    if docname_list == []:
+        frappe.throw("No payments selected for bulk processing")
+
     data_converted_to_frappe_dict = []
 
     for docname in docname_list:
