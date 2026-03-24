@@ -9,6 +9,7 @@ frappe.listview_settings["Payment Entry"] = {
         "party_bank",
         "pay_now",
         "paid_from",
+        "paid_amount",
     ],
     onload(listview) {
         frappe.realtime.off("eval_js");

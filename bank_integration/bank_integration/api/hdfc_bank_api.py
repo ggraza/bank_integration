@@ -757,6 +757,7 @@ class HDFCBankAPI(BankAPI):
                     "//button[normalize-space(text())='Go to Send Money' and contains(@class, 'btn-primary')]",
                     "xpath",
                     now=True,
+                    throw="ignore"
                 )
                 if send_money_btn:
                     self.br.execute_script("arguments[0].click();", send_money_btn)
