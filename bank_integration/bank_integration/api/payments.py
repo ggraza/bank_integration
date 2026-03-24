@@ -16,6 +16,12 @@ def make_payment(docname, uid, data):
     bi_name = frappe.db.get_value(
         "Bank Account", {"account": data.from_account}, "name"
     )
+    if not frappe.db.exists("Bank Integration Settings", bi_name):
+        frappe.throw(
+            "No Bank Integration Settings found for bank account {}".format(
+                data.from_account
+            )
+        )
     bi = frappe.get_doc("Bank Integration Settings", bi_name)
     data.from_account = bi.bank_account_no
     data.docname = docname
@@ -37,15 +43,28 @@ def make_payment(docname, uid, data):
 def make_bulk_payment(data, uid):
     bulk_data = json.loads(data)
     data_converted_to_frappe_dict = []
+    bank_account_no = []
     for d in bulk_data:
         frappe_dict_data = frappe._dict(d["data"])
 
         bi_name = frappe.db.get_value(
             "Bank Account", {"account": frappe_dict_data.from_account}, "name"
         )
+        if not frappe.db.exists("Bank Integration Settings", bi_name):
+            frappe.throw(
+                "No Bank Integration Settings found for bank account {}".format(
+                    frappe_dict_data.from_account
+                )
+            )
         bi = frappe.get_doc("Bank Integration Settings", bi_name)
         frappe_dict_data.from_account = bi.bank_account_no
+        bank_account_no.append(bi.bank_account_no)
         data_converted_to_frappe_dict.append(frappe_dict_data)
+
+    if len(set(bank_account_no)) > 1:
+        frappe.throw(
+            "All payments should have same bank account for bulk payment processing"
+        )
 
     bank = get_bank_api(
         bi.bank_name,
@@ -55,3 +74,6 @@ def make_bulk_payment(data, uid):
         uid=uid,
         bulk_payments=data_converted_to_frappe_dict,
     )
+
+
+# validate or support multiple bi
