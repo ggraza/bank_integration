@@ -78,7 +78,7 @@ frappe.listview_settings["Payment Entry"] = {
         });
 
         frappe.realtime.on("payment_success_bulk", function (data) {
-            if (listview && listview._uid !== data.uid) return;
+            if (!listview || listview._uid !== data.uid) return;
             frappe.update_msgprint(`Payment completed for the following Payment Entry:<br>
             <strong>Payment Entry ID:</strong> ${data.docname}<br>
             <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>

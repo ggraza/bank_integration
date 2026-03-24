@@ -35,6 +35,7 @@ frappe.ui.form.on("Payment Entry", {
             frappe.update_msgprint("Payment successful!");
             setTimeout(function () {
                 frappe.hide_msgprint();
+                frm.doc.reference_no = data.ref_no;
                 frm.refresh();
                 if (frm.doc.comm_email) {
                     let email_dialog = new frappe.views.CommunicationComposer({
@@ -44,7 +45,7 @@ frappe.ui.form.on("Payment Entry", {
                         recipients: frm.doc.comm_email,
                         attach_document_print: true,
                         message: `Hello,<br><br>
-                                A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${data.ref_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
+                                A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${frm.doc.reference_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
                                 Feel free to get in touch with us if you have any queries or concerns.<br><br>
                                 Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
                     });
