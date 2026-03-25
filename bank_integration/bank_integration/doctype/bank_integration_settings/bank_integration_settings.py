@@ -9,14 +9,16 @@ from bank_integration.bank_integration.api import get_bank_api
 
 class BankIntegrationSettings(Document):
 	def before_save(self):
+		filters = {"bank_account_no": self.bank_account_no}
+		if not self.is_new():
+			filters["name"] = ["!=", self.name]
 		bank_integrations=frappe.db.get_list(
 			'Bank Integration Settings',
 			fields=['name'],
-			filters={'bank_account_no':self.bank_account_no
-			})
+			filters=filters
+			)
 		if len(bank_integrations) > 0:
-			if bank_integrations[0].name != self.name:
-				frappe.throw('Only one Bank Integration for a bank account can exist.')
+			frappe.throw('Only one Bank Integration for a bank account can exist.')
 
 	@frappe.whitelist()
 	def check_credentials(self, uid):

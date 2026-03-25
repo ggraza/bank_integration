@@ -17,7 +17,10 @@ frappe.ui.form.on('Bank Integration Settings', {
 			"Bank Integration Settings",
 			{
 				fields: ["name"],
-				filters: { bank_account_no: frm.doc.bank_account_no }
+				filters: {
+            		bank_account_no: frm.doc.bank_account_no,
+            		name: ["!=", frm.doc.name],
+        		}
 			}
 		);
 		if (bank_integrations.length > 0) {
