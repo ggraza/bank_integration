@@ -15,7 +15,8 @@ class BankIntegrationSettings(Document):
 			filters={'bank_account_no':self.bank_account_no
 			})
 		if len(bank_integrations) > 0:
-			frappe.throw('Only one Bank Integration for a bank account can exist.')
+			if bank_integrations[0].name != self.name:
+				frappe.throw('Only one Bank Integration for a bank account can exist.')
 
 	@frappe.whitelist()
 	def check_credentials(self, uid):

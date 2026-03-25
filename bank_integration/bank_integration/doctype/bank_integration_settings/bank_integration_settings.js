@@ -21,8 +21,10 @@ frappe.ui.form.on('Bank Integration Settings', {
 			}
 		);
 		if (bank_integrations.length > 0) {
-			frm.reload_doc();
-			frappe.throw(__("Only one Bank Integration for a bank account can exist."));
+			if (bank_integrations[0].name !== frm.doc.name) {
+				frm.reload_doc();
+				frappe.throw(__("Only one Bank Integration for a bank account can exist."));
+			}
 		}
 		if(!frm.doc.disabled){
 			frm.call("check_credentials", { uid: frm._uid });
