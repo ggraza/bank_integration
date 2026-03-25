@@ -13,7 +13,7 @@ def set_correct_payment_data(func):
             data = getattr(self, "data", None)
 
         if not data:
-            raise Exception("No payment data available")
+            raise self.throw("No payment data available")
 
         self.data = data
 

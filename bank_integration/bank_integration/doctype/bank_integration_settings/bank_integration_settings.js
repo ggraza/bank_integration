@@ -12,21 +12,20 @@ frappe.ui.form.on('Bank Integration Settings', {
 		bi.listenForQuestions(frm);
 	},
 	async validate(frm) {
-		let n=1
-		if(frm.docname.includes("new-bank-integration-settings")){
-			n=0
-		}
 		frm._uid = frappe.utils.get_random(7);
 		let bank_integrations = await frappe.db.get_list(
 			"Bank Integration Settings",
 			{
 				fields: ["name"],
-				filters: { bank_account: frm.doc.bank_account }
+				filters: { bank_account_no: frm.doc.bank_account_no }
 			}
 		);
-		if (bank_integrations.length > n) {
+		if (bank_integrations.length > 0) {
+			frm.reload_doc();
 			frappe.throw(__("Only one Bank Integration for a bank account can exist."));
 		}
-		frm.call("check_credentials", { uid: frm._uid });
+		if(!frm.doc.disabled){
+			frm.call("check_credentials", { uid: frm._uid });
+		}
 	}
 });

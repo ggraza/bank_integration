@@ -2,6 +2,8 @@ frappe.provide('bi');
 frappe.provide("modifyMethod");
 
 bi.listenForOtp = function (frm,is_bulk=false) {
+	// frm will contain listview object if it is bulk_payment, 
+	// otherwise it will contain form object. 
 	let bulk=""
 	if(is_bulk){
 		bulk="_bulk"
