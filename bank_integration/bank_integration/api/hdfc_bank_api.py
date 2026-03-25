@@ -380,8 +380,7 @@ class HDFCBankAPI(BankAPI):
             self.make_payment_within_bank()
         elif (
             self.data.transfer_type
-            and self.data.transfer_type.strip().rsplit(" ", 1)[0]
-            == "Transfer to other bank"
+            and self.data.transfer_type.startswith("Transfer to other bank")
         ):
             self.make_inter_bank_payment()
 
