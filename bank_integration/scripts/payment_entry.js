@@ -1,14 +1,14 @@
 // Copyright (c) 2018, Resilient Tech and contributors
 // For license information, please see license.txt
 
-frappe.ui.form.on('Payment Entry', {
+frappe.ui.form.on("Payment Entry", {
     setup(frm) {
-		frappe.realtime.on("eval_js", function(message){
-			eval(message);
-		});
-	},
-	
-    onload: function(frm) {
+        frappe.realtime.on("eval_js", function (message) {
+            eval(message);
+        });
+    },
+
+    onload: function (frm) {
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);
 
@@ -23,67 +23,71 @@ frappe.ui.form.on('Payment Entry', {
             return false;
         });
 
-        frappe.realtime.on('payment_success', function(data){
+        frappe.realtime.on("payment_success", function (data) {
             if (data.uid != frm._uid || frm.success_action_started) {
                 return;
             }
 
             frm.success_action_started = true;
-            frappe.update_msgprint('Payment successful!');
-            setTimeout(function() {
+            frappe.update_msgprint("Payment successful!");
+            setTimeout(function () {
                 frappe.hide_msgprint();
-                frm.set_value('remarks', '');
-                frm.set_value('online_payment_status', 'Paid');
-                frm.set_value('reference_no',data.ref_no);
+                frm.set_value("remarks", "");
+                frm.set_value("online_payment_status", "Paid");
+                frm.set_value("reference_no", data.ref_no);
                 frm.refresh();
-                frm.save().then(function(){
+                frm.save().then(function () {
                     frm.savesubmit().then(() => {
                         if (frm.doc.comm_email) {
-                            let email_dialog = new frappe.views.CommunicationComposer({
-                                doc: frm.doc,
-                                frm: frm,
-                                subject: `Online Payment Processed (${frm.doc.name})`,
-                                recipients: frm.doc.comm_email,
-                                attach_document_print: true,
-                                message: `Hello,<br><br>
+                            let email_dialog =
+                                new frappe.views.CommunicationComposer({
+                                    doc: frm.doc,
+                                    frm: frm,
+                                    subject: `Online Payment Processed (${frm.doc.name})`,
+                                    recipients: frm.doc.comm_email,
+                                    attach_document_print: true,
+                                    message: `Hello,<br><br>
                                 A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${frm.doc.reference_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
                                 Feel free to get in touch with us if you have any queries or concerns.<br><br>
-                                Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`
-                            });
+                                Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
+                                });
 
-                            email_dialog.dialog.$wrapper.on('shown.bs.modal', () => {
-                                email_dialog.select_attachments();
-                            });
+                            email_dialog.dialog.$wrapper.on(
+                                "shown.bs.modal",
+                                () => {
+                                    email_dialog.select_attachments();
+                                },
+                            );
                         } else {
                             setup_sms(frm);
                             if (frm.sms_link) frm.sms_link.click();
                         }
-                    })
+                    });
                 });
             }, 1000);
             delete frm.success_action_started;
         });
     },
 
-    payment_type: function(frm){
+    payment_type: function (frm) {
         check_bank_integration(frm);
     },
 
-    paid_from: function(frm) {
+    paid_from: function (frm) {
         check_bank_integration(frm);
     },
 
-    party: function(frm) {
+    party: function (frm) {
         set_bank_name_and_ac(frm);
         get_contact_data(frm);
     },
 
-    pay_now: function(frm) {
+    pay_now: function (frm) {
         if (!frm.doc.paid_from_bank) {
             check_bank_integration(frm);
         }
 
-        if (frm.doc.payment_type != 'Pay'){
+        if (frm.doc.payment_type != "Pay") {
             return;
         }
 
@@ -92,123 +96,148 @@ frappe.ui.form.on('Payment Entry', {
 
         if (frm.doc.pay_now) {
             // Set reference details
-            frm.set_value('reference_no', '-');
-            frm.set_value('reference_date', frappe.datetime.get_today());
+            frm.set_value("reference_no", "-");
+            frm.set_value("reference_date", frappe.datetime.get_today());
 
             // Set mandatory
-            frm.toggle_reqd(['party_bank_ac_no', 'payment_desc', 'transfer_type'], 1)
+            frm.toggle_reqd(
+                ["party_bank_ac_no", "payment_desc", "transfer_type"],
+                1,
+            );
         } else {
-            reset_fields(frm, 'reference_no', 'reference_date');
-            frm.toggle_reqd(['party_bank_ac_no', 'payment_desc', 'transfer_type'], 0)
+            reset_fields(frm, "reference_no", "reference_date");
+            frm.toggle_reqd(
+                ["party_bank_ac_no", "payment_desc", "transfer_type"],
+                0,
+            );
         }
     },
 
-    party_bank: function(frm){
-        set_transfer_type(frm);
-    },
-
-    paid_amount: async function(frm){
+    party_bank: async function (frm) {
         await set_transfer_type(frm);
-        if(frm.doc.paid_amount<200000 && frm.doc.transfer_type!="Transfer within the bank" && frm.doc.transfer_type!="Transfer to other bank (IMPS)"){
-            await frm.set_value('transfer_type', 'Transfer to other bank (NEFT)');
-            frm.refresh_field('transfer_type')
+    },
+
+    paid_amount: async function (frm) {
+        await set_transfer_type(frm);
+        if (
+            frm.doc.paid_from_bank &&
+            frm.doc.party_bank &&
+            frm.doc.paid_amount < 200000 &&
+            frm.doc.transfer_type != "Transfer within the bank" &&
+            frm.doc.transfer_type != "Transfer to other bank (IMPS)"
+        ) {
+            await frm.set_value(
+                "transfer_type",
+                "Transfer to other bank (NEFT)",
+            );
+            frm.refresh_field("transfer_type");
         }
     },
 
-    payment_desc: function(frm){
-        frm.set_value('payment_desc', frm.doc.payment_desc.replace(/[^a-zA-Z0-9 ]/gi, ''));
+    payment_desc: function (frm) {
+        frm.set_value(
+            "payment_desc",
+            frm.doc.payment_desc.replace(/[^a-zA-Z0-9 ]/gi, ""),
+        );
     },
 
     transfer_type: function(frm){
-        if (frm.doc.transfer_type.includes('Transfer to other bank')){
+        if (frm.doc.transfer_type == 'Transfer to other bank (NEFT)'){
             frm.toggle_reqd('comm_type', 1);
             frm.set_value('comm_type', 'Email');
         } else {
-            frm.toggle_reqd('comm_type', 0);
-            reset_fields(frm, 'comm_type');
+            frm.toggle_reqd("comm_type", 0);
+            reset_fields(frm, "comm_type");
         }
     },
 
-    comm_type: function(frm) {
-        if(frm.doc.comm_type){
-            if (frm.doc.comm_type == 'Email'){
-                frm.toggle_reqd('comm_email', 1);
-                frm.toggle_reqd('comm_mobile', 0);
-            } else if (frm.doc.comm_type == 'Mobile'){
-                frm.toggle_reqd('comm_mobile', 1);
-                frm.toggle_reqd('comm_email', 0);
+    comm_type: function (frm) {
+        if (frm.doc.comm_type) {
+            if (frm.doc.comm_type == "Email") {
+                frm.toggle_reqd("comm_email", 1);
+                frm.toggle_reqd("comm_mobile", 0);
+            } else if (frm.doc.comm_type == "Mobile") {
+                frm.toggle_reqd("comm_mobile", 1);
+                frm.toggle_reqd("comm_email", 0);
             }
         } else {
-            frm.toggle_reqd(['comm_email', 'comm_mobile'], 0);
+            frm.toggle_reqd(["comm_email", "comm_mobile"], 0);
         }
     },
 
-    validate: function(frm) {
-        if (frm.doc.docstatus === 0){
-            if (frm.get_docfield('pay_now').hidden_due_to_dependency){
-                frm.set_value('pay_now', 0);
+    validate: function (frm) {
+        if (frm.doc.docstatus === 0) {
+            if (frm.get_docfield("pay_now").hidden_due_to_dependency) {
+                frm.set_value("pay_now", 0);
             } else if (frm.doc.pay_now && !frm.doc.online_payment_status) {
-                frm.doc.online_payment_status = 'Unpaid';
+                frm.doc.online_payment_status = "Unpaid";
             }
         }
     },
     before_submit: function (frm) {
         if (frm.doc.pay_now && frm.doc.online_payment_status != "Paid") {
             frappe.throw({
-                "title": __("Warning"),
-                "message": __("Payment not made !"),
-                "indicator": "orange"
-            })
+                title: __("Warning"),
+                message: __("Payment not made !"),
+                indicator: "orange",
+            });
         }
     },
 
-    refresh: function(frm) {
+    refresh: async function (frm) {
         if (frm.doc.docstatus === 0) {
             frm.fields_dict.payment_desc.$input[0].maxLength = 20;
             frm.fields_dict.comm_mobile.$input[0].maxLength = 10;
         }
 
-        if (frm.doc.docstatus === 0 && !frm.doc.__unsaved){
-            if (frm.doc.pay_now && frm.doc.online_payment_status == 'Unpaid'){
-                var comm_value = '';
-                if (frm.doc.comm_type == 'Email') {
+        if (frm.doc.docstatus === 0 && !frm.doc.__unsaved) {
+            if (frm.doc.pay_now && frm.doc.online_payment_status == "Unpaid") {
+                var comm_value = "";
+                if (frm.doc.comm_type == "Email") {
                     comm_value = frm.doc.comm_email;
-                } else if (frm.doc.comm_type == 'Mobile') {
+                } else if (frm.doc.comm_type == "Mobile") {
                     comm_value = frm.doc.comm_mobile;
                 }
 
-                set_transfer_type(frm)
+                await set_transfer_type(frm);
 
-                frm.add_custom_button(__('Make Online Payment'), function() {
-                    frappe.confirm(`Are you sure you want to proceed with the following details? <br>
+                frm.add_custom_button(__("Make Online Payment"), function () {
+                    frappe.confirm(
+                        `Are you sure you want to proceed with the following details? <br>
                     <br> Party's Bank Account No: <strong>${frm.doc.party_bank_ac_no}</strong>
                     <br> Transfer Type: <strong>${frm.doc.transfer_type}</strong>
                     <br> Amount Payable: <strong>${fmt_money(frm.doc.paid_amount)}</strong>
                     <br> Description: <strong>${frm.doc.payment_desc}</strong>`,
-                    function() {
-                        frm._uid = frappe.utils.get_random(7);
-                        let payment_data = {
-                            from_account: frm.doc.paid_from,
-                            to_account: frm.doc.party_bank_ac_no,
-                            transfer_type: frm.doc.transfer_type,
-                            amount: frm.doc.paid_amount,
-                            payment_desc: frm.doc.payment_desc,
-                            comm_type: frm.doc.comm_type,
-                            comm_value: comm_value ? comm_value.trim().replace(" ", "") : ''
-                        }
+                        function () {
+                            frm._uid = frappe.utils.get_random(7);
+                            let payment_data = {
+                                from_account: frm.doc.paid_from,
+                                to_account: frm.doc.party_bank_ac_no,
+                                transfer_type: frm.doc.transfer_type,
+                                amount: frm.doc.paid_amount,
+                                payment_desc: frm.doc.payment_desc,
+                                comm_type: frm.doc.comm_type,
+                                comm_value: comm_value
+                                    ? comm_value.trim().replace(" ", "")
+                                    : "",
+                            };
 
-                        frappe.call({
-                            method: "bank_integration.bank_integration.api.payments.make_payment",
-                            args: {docname: frm.doc.name, uid: frm._uid, data: payment_data},
-                        });
-                    });
+                            frappe.call({
+                                method: "bank_integration.bank_integration.api.payments.make_payment",
+                                args: {
+                                    docname: frm.doc.name,
+                                    uid: frm._uid,
+                                    data: payment_data,
+                                },
+                            });
+                        },
+                    );
                 });
-
             }
         }
 
         setup_sms(frm);
-    }
+    },
 });
 
 
@@ -316,11 +345,11 @@ function setup_sms(frm) {
 function check_bank_integration(frm){
     if(frm.doc.payment_type == 'Pay' && frm.doc.paid_from) {
         frappe.db.get_value('Bank Account', {'account': frm.doc.paid_from}, ['name', 'bank'])
-        .then((r) => {
+        .then(async (r) => {
             if(r.message){
                 frm.set_value('paid_from_bank', r.message.bank ? r.message.bank : '');
                 if (frm.doc.paid_from_bank) {
-                    set_transfer_type(frm);
+                    await set_transfer_type(frm);
                 }
 
                 frappe.db.get_value('Bank Integration Settings', {name: r.message.name, disabled: false}, 'name').then((r) => {
@@ -359,12 +388,12 @@ function set_bank_name_and_ac(frm) {
     }
 }
 
-async function set_transfer_type(frm) {
+function set_transfer_type(frm) {
     if(frm.doc.paid_from_bank && frm.doc.party_bank) {
         if(frm.doc.paid_from_bank == frm.doc.party_bank){
             frm.set_df_property("transfer_type","options",
                 ["Transfer within the bank"].join("\n"))
-            await frm.set_value('transfer_type', 'Transfer within the bank');
+            frm.set_value('transfer_type', 'Transfer within the bank');
         } else {
             frm.set_df_property("transfer_type", "options", [
             "Transfer to other bank (NEFT)",
@@ -372,12 +401,12 @@ async function set_transfer_type(frm) {
             ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : [])
             ].join("\n"));
             if(frm.doc.transfer_type=="Transfer within the bank" || frm.doc.transfer_type==""){
-                await frm.set_value('transfer_type','Transfer to other bank (NEFT)');
+                frm.set_value('transfer_type','Transfer to other bank (NEFT)')
             }
             frm.refresh_field("transfer_type");
         }
     } else {
-        reset_fields(frm, 'transfer_type');
+        reset_fields(frm, "transfer_type");
     }
 }
 
