@@ -124,6 +124,7 @@ frappe.ui.form.on("Payment Entry", {
             frm.doc.party_bank &&
             frm.doc.paid_amount < 200000 &&
             frm.doc.transfer_type != "Transfer within the bank" &&
+            frm.doc.transfer_type != "Transfer to other bank (NEFT)" &&
             frm.doc.transfer_type != "Transfer to other bank (IMPS)"
         ) {
             await frm.set_value(
@@ -142,7 +143,7 @@ frappe.ui.form.on("Payment Entry", {
     },
 
     transfer_type: function(frm){
-        if (frm.doc.transfer_type == 'Transfer to other bank (NEFT)'){
+        if (frm.doc.transfer_type && frm.doc.transfer_type.includes('Transfer to other bank')){
             frm.toggle_reqd('comm_type', 1);
             frm.set_value('comm_type', 'Email');
         } else {
