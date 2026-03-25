@@ -109,10 +109,10 @@ frappe.ui.form.on('Payment Entry', {
 
     paid_amount: function(frm){
         set_transfer_type(frm);
-        if (frm.doc.paid_amount>=200000 && frm.doc.transfer_type!="Transfer within the bank"){
+        if (frm.doc.paid_amount>=200000 && frm.doc.transfer_type!="Transfer within the bank" && frm.doc.transfer_type!="Transfer to other bank (NEFT)" && frm.doc.transfer_type!="Transfer to other bank (IMPS)"){
             frm.set_value('transfer_type', 'Transfer to other bank (RTGS)');
             frm.refresh_field('transfer_type')
-        }else if(frm.doc.transfer_type!="Transfer within the bank"){
+        }else if(frm.doc.transfer_type!="Transfer within the bank" && frm.doc.transfer_type!="Transfer to other bank (IMPS)"){
             frm.set_value('transfer_type', 'Transfer to other bank (NEFT)');
             frm.refresh_field('transfer_type')
         }
