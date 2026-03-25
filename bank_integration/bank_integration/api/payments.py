@@ -113,6 +113,7 @@ def make_bulk_payment(docname_list, uid):
         doctype="Payment Entry",
         uid=uid,
         bulk_payments=data_converted_to_frappe_dict,
+        docname=data_converted_to_frappe_dict[0].docname,
     )
 
 

@@ -3,7 +3,6 @@
 
 frappe.ui.form.on("Payment Entry", {
     setup: function (frm) {
-        frappe.realtime.off("bi_action");
         frappe.realtime.on("bi_action", function (data) {
 
             switch (data.action) {
@@ -30,7 +29,7 @@ frappe.ui.form.on("Payment Entry", {
                     setTimeout(function () {
                         frappe.hide_msgprint();
                         frm.doc.reference_no = data.ref_no;
-                        frm.refresh();
+                        frm.reload_doc();
                         if (frm.doc.comm_email) {
                             let email_dialog = new frappe.views.CommunicationComposer({
                                 doc: frm.doc,
@@ -56,8 +55,6 @@ frappe.ui.form.on("Payment Entry", {
     },
 
     onload: function (frm) {
-        frappe.realtime.off("get_bank_otp");
-        frappe.realtime.off("get_bank_answers");
         
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);

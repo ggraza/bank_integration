@@ -16,6 +16,7 @@ def set_correct_payment_data(func):
             raise Exception("No payment data available")
 
         self.data = data
+        self.docname = data.docname
 
         return func(self, *args, **kwargs)
 

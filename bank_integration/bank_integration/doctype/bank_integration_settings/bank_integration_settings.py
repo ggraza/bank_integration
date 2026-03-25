@@ -15,7 +15,7 @@ class BankIntegrationSettings(Document):
 		bank_integrations=frappe.db.get_list(
 			'Bank Integration Settings',
 			fields=['name'],
-			filters={'name':self.name
+			filters={'bank_account':self.bank_account
 			})
 		if len(bank_integrations) > n:
 			frappe.throw('Only one Bank Integration for a bank account can exist.')

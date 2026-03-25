@@ -11,13 +11,14 @@ frappe.ui.form.on('Bank Integration Settings', {
                     }
                     break;
 				case "login_success":
-					if(frm._uid == data.uid){
+					if(frm && frm._uid == data.uid){
 						setTimeout(() => {
 							frappe.hide_msgprint();
 						}, 2000);
 					}
 					break;
 				case "reload_doc":
+					
                     if(frm && frm._uid == data.uid){
                         if (frm.docname == data.docname) {
 							frappe.hide_msgprint()

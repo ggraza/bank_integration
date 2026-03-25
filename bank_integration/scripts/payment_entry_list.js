@@ -9,10 +9,10 @@ frappe.listview_settings["Payment Entry"] = {
         "party_bank",
         "pay_now",
         "paid_from",
+        "paid_amount",
     ],
     onload(listview) {
-        frappe.realtime.off("bi_action");
-        frappe.realtime.off("get_bank_otp_bulk");
+
 
         frappe.realtime.on("bi_action", function (data) {
             switch (data.action) {
