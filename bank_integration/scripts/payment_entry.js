@@ -145,7 +145,9 @@ frappe.ui.form.on("Payment Entry", {
     transfer_type: function(frm){
         if (frm.doc.transfer_type && frm.doc.transfer_type.includes('Transfer to other bank')){
             frm.toggle_reqd('comm_type', 1);
-            frm.set_value('comm_type', 'Email');
+            if(!frm.doc.comm_type){
+                frm.set_value('comm_type', 'Email');
+            }
         } else {
             frm.toggle_reqd("comm_type", 0);
             reset_fields(frm, "comm_type");
@@ -389,12 +391,12 @@ function set_bank_name_and_ac(frm) {
     }
 }
 
-function set_transfer_type(frm) {
+async function set_transfer_type(frm) {
     if(frm.doc.paid_from_bank && frm.doc.party_bank) {
         if(frm.doc.paid_from_bank == frm.doc.party_bank){
             frm.set_df_property("transfer_type","options",
                 ["Transfer within the bank"].join("\n"))
-            frm.set_value('transfer_type', 'Transfer within the bank');
+            await frm.set_value('transfer_type', 'Transfer within the bank');
         } else {
             frm.set_df_property("transfer_type", "options", [
             "Transfer to other bank (NEFT)",
@@ -402,7 +404,7 @@ function set_transfer_type(frm) {
             ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : [])
             ].join("\n"));
             if(frm.doc.transfer_type=="Transfer within the bank" || frm.doc.transfer_type==""){
-                frm.set_value('transfer_type','Transfer to other bank (NEFT)')
+                await frm.set_value('transfer_type','Transfer to other bank (NEFT)');
             }
             frm.refresh_field("transfer_type");
         }
