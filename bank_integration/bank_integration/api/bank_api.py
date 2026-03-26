@@ -110,6 +110,8 @@ class BankAPI:
             self.bulk_payments = cached["bulk_data"]
         if "is_bulk_payments" in cached:
             self.is_bulk_payments = cached["is_bulk_payments"]
+        if "remove_payment" in cached:
+            self.remove_payment = cached["remove_payment"]
 
         resume_info = frappe._dict(cached["resume_info"])
 
@@ -204,6 +206,7 @@ class BankAPI:
                     "data": self.data,
                     "bulk_data": self.bulk_payments,
                     "is_bulk_payments": self.is_bulk_payments,
+                    "remove_payment":self.remove_payment,
                 },
                 user=frappe.session.user,
             )

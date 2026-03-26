@@ -70,6 +70,9 @@ def make_bulk_payment(docname_list, uid):
     if docname_list == []:
         frappe.throw("No payments selected for bulk processing")
 
+    if len(docname_list) >500:
+        frappe.throw("You can process maximum 500 payments at a time")
+
     data_converted_to_frappe_dict = []
 
     for docname in docname_list:
