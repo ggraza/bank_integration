@@ -40,12 +40,11 @@ frappe.listview_settings["Payment Entry"] = {
                     if (!listview || listview._uid !== data.uid) return;
                         frappe.update_msgprint(`Payment completed for the following Payment Entry:<br>
                         <strong>Payment Entry ID:</strong> ${data.docname}<br>
+                        <strong>Party's Name:</strong> ${data.party_name}<br>
                         <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>
                         <strong>Payment Reference No.:</strong> ${data.ref_no}<br>
                         <strong>Date:</strong> ${frappe.datetime.get_today()}<br>
                         <strong>Payment Proof:</strong> You can find the payment proof attached within this Payment Entry document.<br><br>
-                        The payment note includes details of your invoices against which this payment was made.<br>
-                        Thank you for doing business with us. We look forward to your continued patronage in the future.<br>
                         Proceeding to next payment...<br>`);
                     break;
                 }
