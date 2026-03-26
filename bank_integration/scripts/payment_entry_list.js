@@ -58,8 +58,18 @@ frappe.listview_settings["Payment Entry"] = {
                 frappe.msgprint("Please select at least one Payment Entry.");
                 return;
             }
-
+            let ineligible_docs = [];
             const eligible_docs = selected_docs.filter((d) => {
+                if (
+                    cint(d.docstatus) === 1 ||
+                    cint(d.docstatus) === 2 ||
+                    d.payment_type !== "Pay" ||
+                    cint(d.pay_now) !== 1 ||
+                    d.online_payment_status !== "Unpaid"
+                ) {
+                    ineligible_docs.push(d.name);
+                    return false;
+                }
                 return (
                     cint(d.docstatus) === 0 &&
                     d.payment_type === "Pay" &&
@@ -68,9 +78,23 @@ frappe.listview_settings["Payment Entry"] = {
                 );
             });
 
+            if (ineligible_docs.length) {
+                frappe.msgprint(
+                    `The following Payment Entries are ineligible for payment processing<br>Please select only unpaid draft Payment Entries with Pay Now enabled.<br><br><strong>- ${ineligible_docs.join("<br>- ")}</strong>`,
+                );
+                return;
+            }
+
             if (!eligible_docs.length) {
                 frappe.msgprint(
-                    "No eligible rows found. Select unpaid draft Pay entries with Pay Now enabled.",
+                    "No eligible rows found. Select unpaid draft Payment entries with Pay Now enabled.",
+                );
+                return;
+            }
+
+            if (eligible_docs.length > 500) {
+                frappe.msgprint(
+                    "You can process a maximum of 500 Payment Entries at once. Please select fewer entries and try again.",
                 );
                 return;
             }
