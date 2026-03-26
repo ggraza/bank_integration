@@ -8,6 +8,25 @@ import json
 import frappe
 from bank_integration.bank_integration.api import get_bank_api
 
+def get_bank_integration_settings(from_account):
+    bi_name = frappe.db.get_value(
+        "Bank Account", {"account": from_account}, "name"
+    )
+    if not frappe.db.exists("Bank Integration Settings", bi_name):
+        frappe.throw(
+            "No Bank Integration Settings found for bank account {}".format(
+                from_account
+            )
+        )
+    bi = frappe.get_doc("Bank Integration Settings", bi_name)
+
+    if bi.disabled:
+        frappe.throw(
+            "Bank Integration Settings for bank account {} is disabled".format(
+                from_account
+            )
+        )
+    return bi
 
 @frappe.whitelist()
 def make_payment(docname, uid):
@@ -24,23 +43,9 @@ def make_payment(docname, uid):
         }
     )
 
-    bi_name = frappe.db.get_value(
-        "Bank Account", {"account": data.from_account}, "name"
-    )
-    if not frappe.db.exists("Bank Integration Settings", bi_name):
-        frappe.throw(
-            "No Bank Integration Settings found for bank account {}".format(
-                data.from_account
-            )
-        )
-    bi = frappe.get_doc("Bank Integration Settings", bi_name)
+    bi=get_bank_integration_settings(data.from_account)
 
-    if bi.disabled:
-        frappe.throw(
-            "Bank Integration Settings for bank account {} is disabled".format(
-                data.from_account
-            )
-        )
+    
 
     data.from_account = bi.bank_account_no
 
@@ -67,9 +72,6 @@ def make_bulk_payment(docname_list, uid):
 
     data_converted_to_frappe_dict = []
 
-    if docname_list == []:
-        frappe.throw("No payments selected for bulk payment processing")
-
     for docname in docname_list:
         payment_entry = frappe.get_doc("Payment Entry", docname)
         data = frappe._dict(
@@ -87,23 +89,7 @@ def make_bulk_payment(docname_list, uid):
 
     bank_account_no = []
     for frappe_dict_data in data_converted_to_frappe_dict:
-        bi_name = frappe.db.get_value(
-            "Bank Account", {"account": frappe_dict_data.from_account}, "name"
-        )
-        if not frappe.db.exists("Bank Integration Settings", bi_name):
-            frappe.throw(
-                "No Bank Integration Settings found for bank account {}".format(
-                    frappe_dict_data.from_account
-                )
-            )
-        bi = frappe.get_doc("Bank Integration Settings", bi_name)
-
-        if bi.disabled:
-            frappe.throw(
-                "Bank Integration Settings for bank account {} is disabled".format(
-                    frappe_dict_data.from_account
-                )
-            )
+        bi=get_bank_integration_settings(frappe_dict_data.from_account)
 
         frappe_dict_data.from_account = bi.bank_account_no
         bank_account_no.append(bi.bank_account_no)
@@ -122,6 +108,3 @@ def make_bulk_payment(docname_list, uid):
         bulk_payments=data_converted_to_frappe_dict,
         docname=data_converted_to_frappe_dict[0].docname,
     )
-
-
-# validate or support multiple bi
