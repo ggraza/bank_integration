@@ -2,13 +2,61 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Payment Entry", {
-    setup(frm) {
-        frappe.realtime.on("eval_js", function (message) {
-            eval(message);
+    setup: function (frm) {
+        frappe.realtime.on("bi_action", function (data) {
+
+            switch (data.action) {
+                case "show_message":
+                    if(frm && frm._uid == data.uid){
+                        frappe.update_msgprint(data.message);
+                    }
+                    break;
+                case "reload_doc":
+                    if(frm && frm._uid == data.uid){
+                        if (frm.docname == data.docname) {
+                            frappe.hide_msgprint()
+                            frm.reload_doc();
+                        }
+                    }
+                    break;
+                case "payment_success":
+                    if (data.uid != frm._uid || frm.success_action_started) {
+                        return;
+                    }
+
+                    frm.success_action_started = true;
+                    frappe.update_msgprint("Payment successful!");
+                    setTimeout(function () {
+                        frappe.hide_msgprint();
+                        frm.doc.reference_no = data.ref_no;
+                        frm.reload_doc().then(()=>{
+                            if (frm.doc.comm_email) {
+                                let email_dialog = new frappe.views.CommunicationComposer({
+                                    doc: frm.doc,
+                                    frm: frm,
+                                    subject: `Online Payment Processed (${frm.doc.name})`,
+                                    recipients: frm.doc.comm_email,
+                                    attach_document_print: true,
+                                    message: `Hello,<br><br>
+                                    A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${frm.doc.reference_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
+                                    Feel free to get in touch with us if you have any queries or concerns.<br><br>
+                                    Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
+                                });
+                                
+                            } else {
+                                setup_sms(frm);
+                                if (frm.sms_link) frm.sms_link.click();
+                            }
+                            delete frm.success_action_started;
+                        })
+                    }, 1000);
+                    break;
+            }
         });
     },
 
     onload: function (frm) {
+        
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);
 
@@ -23,50 +71,6 @@ frappe.ui.form.on("Payment Entry", {
             return false;
         });
 
-        frappe.realtime.on("payment_success", function (data) {
-            if (data.uid != frm._uid || frm.success_action_started) {
-                return;
-            }
-
-            frm.success_action_started = true;
-            frappe.update_msgprint("Payment successful!");
-            setTimeout(function () {
-                frappe.hide_msgprint();
-                frm.set_value("remarks", "");
-                frm.set_value("online_payment_status", "Paid");
-                frm.set_value("reference_no", data.ref_no);
-                frm.refresh();
-                frm.save().then(function () {
-                    frm.savesubmit().then(() => {
-                        if (frm.doc.comm_email) {
-                            let email_dialog =
-                                new frappe.views.CommunicationComposer({
-                                    doc: frm.doc,
-                                    frm: frm,
-                                    subject: `Online Payment Processed (${frm.doc.name})`,
-                                    recipients: frm.doc.comm_email,
-                                    attach_document_print: true,
-                                    message: `Hello,<br><br>
-                                A payment for ${fmt_money(frm.doc.paid_amount)} with Reference No. ${frm.doc.reference_no} has been made to your account on ${frappe.datetime.get_today()}. Enclosed is the payment note, with details of your invoices against which the said payment is made.<br><br>
-                                Feel free to get in touch with us if you have any queries or concerns.<br><br>
-                                Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
-                                });
-
-                            email_dialog.dialog.$wrapper.on(
-                                "shown.bs.modal",
-                                () => {
-                                    email_dialog.select_attachments();
-                                },
-                            );
-                        } else {
-                            setup_sms(frm);
-                            if (frm.sms_link) frm.sms_link.click();
-                        }
-                    });
-                });
-            }, 1000);
-            delete frm.success_action_started;
-        });
     },
 
     payment_type: function (frm) {
@@ -195,12 +199,6 @@ frappe.ui.form.on("Payment Entry", {
 
         if (frm.doc.docstatus === 0 && !frm.doc.__unsaved) {
             if (frm.doc.pay_now && frm.doc.online_payment_status == "Unpaid") {
-                var comm_value = "";
-                if (frm.doc.comm_type == "Email") {
-                    comm_value = frm.doc.comm_email;
-                } else if (frm.doc.comm_type == "Mobile") {
-                    comm_value = frm.doc.comm_mobile;
-                }
 
                 await set_transfer_type(frm);
 
@@ -213,24 +211,12 @@ frappe.ui.form.on("Payment Entry", {
                     <br> Description: <strong>${frm.doc.payment_desc}</strong>`,
                         function () {
                             frm._uid = frappe.utils.get_random(7);
-                            let payment_data = {
-                                from_account: frm.doc.paid_from,
-                                to_account: frm.doc.party_bank_ac_no,
-                                transfer_type: frm.doc.transfer_type,
-                                amount: frm.doc.paid_amount,
-                                payment_desc: frm.doc.payment_desc,
-                                comm_type: frm.doc.comm_type,
-                                comm_value: comm_value
-                                    ? comm_value.trim().replace(" ", "")
-                                    : "",
-                            };
 
                             frappe.call({
                                 method: "bank_integration.bank_integration.api.payments.make_payment",
                                 args: {
                                     docname: frm.doc.name,
                                     uid: frm._uid,
-                                    data: payment_data,
                                 },
                             });
                         },
@@ -243,73 +229,97 @@ frappe.ui.form.on("Payment Entry", {
     },
 });
 
-
 function setup_sms(frm) {
     if (frm.sms_setup_done) return;
 
-    if (frm.doc.docstatus===1 && !in_list(["Cancelled", "Closed"], frm.doc.status)
-            && frm.doc.payment_type === "Pay"){
+    if (
+        frm.doc.docstatus === 1 &&
+        !in_list(["Cancelled", "Closed"], frm.doc.status) &&
+        frm.doc.payment_type === "Pay"
+    ) {
         frm.sms_setup_done = true;
-        frm.sms_link = frm.page.add_menu_item('Send SMS', function() {
+        frm.sms_link = frm.page.add_menu_item("Send SMS", function () {
             var d = new frappe.ui.Dialog({
-                title: 'Send SMS',
+                title: "Send SMS",
                 width: 400,
                 fields: [
-                    {fieldname:'number', fieldtype:'Data', label:'Mobile Number', reqd:1},
-                    {fieldname:'message', fieldtype:'Text', label:'Message', reqd:1},
-                    {fieldname:'send', fieldtype:'Button', label:'Send'}
-                ]
+                    {
+                        fieldname: "number",
+                        fieldtype: "Data",
+                        label: "Mobile Number",
+                        reqd: 1,
+                    },
+                    {
+                        fieldname: "message",
+                        fieldtype: "Text",
+                        label: "Message",
+                        reqd: 1,
+                    },
+                    { fieldname: "send", fieldtype: "Button", label: "Send" },
+                ],
             });
 
-            d.fields_dict.send.input.onclick = function() {
+            d.fields_dict.send.input.onclick = function () {
                 var btn = d.fields_dict.send.input;
                 var v = d.get_values();
 
-                if(v) {
+                if (v) {
                     $(btn).set_working();
                     frappe.call({
                         method: "frappe.core.doctype.sms_settings.sms_settings.send_sms",
                         args: {
                             receiver_list: [v.number],
-                            msg: v.message
+                            msg: v.message,
                         },
-                        callback: function(r) {
+                        callback: function (r) {
                             $(btn).done_working();
-                            if(r.exc) {frappe.msgprint(r.exc); return; }
+                            if (r.exc) {
+                                frappe.msgprint(r.exc);
+                                return;
+                            }
                             d.hide();
-                        }
+                        },
                     });
                 }
-            }
+            };
 
-            let paid_to_message = 'you';
+            let paid_to_message = "you";
             if (frm.doc.pay_now) {
-                paid_to_message = `your ${frm.doc.party_bank.trim()} a/c ending **`
-                    + frm.doc.party_bank_ac_no.slice(-4);
+                paid_to_message =
+                    `your ${frm.doc.party_bank.trim()} a/c ending **` +
+                    frm.doc.party_bank_ac_no.slice(-4);
             }
 
             let allocation = [];
             for (let i of frm.doc.references) {
                 if (i.reference_doctype === "Purchase Invoice" && i.bill_no) {
-                    allocation.push(i.bill_no
-                        + ` (${i.allocated_amount} ${frm.doc.paid_to_account_currency})`);
+                    allocation.push(
+                        i.bill_no +
+                            ` (${i.allocated_amount} ${frm.doc.paid_to_account_currency})`,
+                    );
                 }
             }
 
-            let allocation_message = ''
+            let allocation_message = "";
             if (allocation.length) {
-                allocation_message = ` against Bill No${ (allocation.length > 1) ? "s" : ""}. ${allocation.join(", ")}`;
-                if (allocation.length === 1 && allocation_message.endsWith(")")) {
-                    allocation_message = allocation_message.slice(0, allocation_message.lastIndexOf(" ("));
+                allocation_message = ` against Bill No${allocation.length > 1 ? "s" : ""}. ${allocation.join(", ")}`;
+                if (
+                    allocation.length === 1 &&
+                    allocation_message.endsWith(")")
+                ) {
+                    allocation_message = allocation_message.slice(
+                        0,
+                        allocation_message.lastIndexOf(" ("),
+                    );
                 }
             }
 
             let mode = frm.doc.mode_of_payment || "Bank Transfer";
             mode = mode.replace("Wire Transfer", "Bank Transfer");
 
-            let ref_message = "."
+            let ref_message = ".";
             if (frm.doc.reference_no && frm.doc.reference_no.replace("-", "")) {
-                ref_message = ` (Ref. No. ${frm.doc.reference_no})`
+                ref_message = ` (Ref. No. ${frm.doc.reference_no})`;
             }
 
             let mobile_no = frm.doc.comm_mobile;
@@ -319,31 +329,33 @@ function setup_sms(frm) {
                     args: {
                         contact_name: frm.doc.contact_person,
                         ref_doctype: frm.doc.party_type,
-                        ref_name: frm.doc.party
+                        ref_name: frm.doc.party,
                     },
-                    callback: function(r) {
-                        if(r.exc) { frappe.msgprint(r.exc); return; }
+                    callback: function (r) {
+                        if (r.exc) {
+                            frappe.msgprint(r.exc);
+                            return;
+                        }
                         mobile_no = r.message;
-                    }
+                    },
                 });
             }
 
-
             d.set_values({
-                'number': mobile_no,
-                'message': `An amount of ${frm.doc.paid_amount.toFixed(2)}`
-                    +  ` ${frm.doc.paid_to_account_currency} has been paid to `
-                    + paid_to_message + allocation_message
-                    + ` via ${mode}${ref_message}`
-                    + `\n\n- ${frm.doc.company}`
+                number: mobile_no,
+                message:
+                    `An amount of ${frm.doc.paid_amount.toFixed(2)}` +
+                    ` ${frm.doc.paid_to_account_currency} has been paid to ` +
+                    paid_to_message +
+                    allocation_message +
+                    ` via ${mode}${ref_message}` +
+                    `\n\n- ${frm.doc.company}`,
             });
 
             d.show();
         })
     }
 }
-
-
 
 function check_bank_integration(frm){
     if(frm.doc.payment_type == 'Pay' && frm.doc.paid_from) {
@@ -373,21 +385,35 @@ function check_bank_integration(frm){
 }
 
 function disable_pay_now(frm) {
-    frm.set_value('pay_now', 0);
-    frm.get_docfield('pay_now').read_only = 1;
-    frm.refresh_field('pay_now');
+    frm.set_value("pay_now", 0);
+    frm.get_docfield("pay_now").read_only = 1;
+    frm.refresh_field("pay_now");
 }
 
 function set_bank_name_and_ac(frm) {
-    if($.inArray(frm.doc.party_type, ['Supplier', 'Customer', 'Employee']) != -1 &&
-        frm.doc.party && frm.doc.pay_now) {
-            frappe.db.get_value(frm.doc.party_type, frm.doc.party, ['bank', 'bank_ac_no'])
+    if (
+        $.inArray(frm.doc.party_type, ["Supplier", "Customer", "Employee"]) !=
+            -1 &&
+        frm.doc.party &&
+        frm.doc.pay_now
+    ) {
+        frappe.db
+            .get_value(frm.doc.party_type, frm.doc.party, [
+                "bank",
+                "bank_ac_no",
+            ])
             .then((r) => {
-                frm.set_value('party_bank', r.message.bank ? r.message.bank : '');
-                frm.set_value('party_bank_ac_no', r.message.bank_ac_no ? r.message.bank_ac_no : '');
+                frm.set_value(
+                    "party_bank",
+                    r.message.bank ? r.message.bank : "",
+                );
+                frm.set_value(
+                    "party_bank_ac_no",
+                    r.message.bank_ac_no ? r.message.bank_ac_no : "",
+                );
             });
     } else {
-        reset_fields(frm, 'party_bank', 'party_bank_ac_no');
+        reset_fields(frm, "party_bank", "party_bank_ac_no");
     }
 }
 
@@ -414,31 +440,40 @@ async function set_transfer_type(frm) {
 }
 
 function get_contact_data(frm) {
-    if(frm.doc.party && $.inArray(frm.doc.party_type, ['Supplier', 'Customer', 'Employee']) != -1){
+    if (
+        frm.doc.party &&
+        $.inArray(frm.doc.party_type, ["Supplier", "Customer", "Employee"]) !=
+            -1
+    ) {
         frappe.call({
-			method: "bank_integration.bank_integration.get_contact_data.get_contact_data",
-            args: {party_type: frm.doc.party_type, party: frm.doc.party,
-                comm_type: frm.doc.comm_type},
-			callback: function(r){
-				if (r.message) {
+            method: "bank_integration.bank_integration.get_contact_data.get_contact_data",
+            args: {
+                party_type: frm.doc.party_type,
+                party: frm.doc.party,
+                comm_type: frm.doc.comm_type,
+            },
+            callback: function (r) {
+                if (r.message) {
                     if (r.message.email) {
-                        frm.set_value('comm_email', r.message.email.trim());
+                        frm.set_value("comm_email", r.message.email.trim());
                     }
                     if (r.message.mobile) {
-                        frm.set_value('comm_mobile',
-                            r.message.mobile.replace(/\s/g,'').slice(-10));
+                        frm.set_value(
+                            "comm_mobile",
+                            r.message.mobile.replace(/\s/g, "").slice(-10),
+                        );
                     }
                 }
-			},
-		});
+            },
+        });
     } else {
-        reset_fields(frm, 'comm_email', 'comm_mobile');
+        reset_fields(frm, "comm_email", "comm_mobile");
     }
 }
 
 function reset_fields() {
     var frm = arguments[0];
-    for(var i=1; i<arguments.length; i++) {
-        frm.set_value(arguments[i], '')
+    for (var i = 1; i < arguments.length; i++) {
+        frm.set_value(arguments[i], "");
     }
 }
