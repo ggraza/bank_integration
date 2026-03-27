@@ -745,7 +745,7 @@ class HDFCBankAPI(BankAPI):
             try:
                 ref_no = (
                     self.get_element(
-                        '//div[contains(@class,"bb-support--subtitle") and contains(normalize-space(text()),"Reference")]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
+                        '//div[contains(@class,"bb-support--subtitle") and (contains(normalize-space(text()),"Reference") or contains(normalize-space(text()),"Transaction ID"))]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
                         "xpath",
                         throw=False,
                     ).text
