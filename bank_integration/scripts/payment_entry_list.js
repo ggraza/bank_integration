@@ -44,7 +44,7 @@ frappe.listview_settings["Payment Entry"] = {
                         <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>
                         <strong>Payment Reference No.:</strong> ${data.ref_no}<br>
                         <strong>Payment Proof:</strong> You can find the payment proof attached within this Payment Entry document.<br><br>
-                        Proceeding to next payment...<br>`);
+                        ${data.is_last ? "All payments are completed." : "Proceeding to next payment..."}<br>`);
                     break;
                 }
         });         

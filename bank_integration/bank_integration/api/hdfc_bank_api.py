@@ -748,6 +748,11 @@ class HDFCBankAPI(BankAPI):
                 docname=self.data.docname,
             )
         else:
+            if getattr(self, "bulk_payments", None):
+                is_last=False
+            else:
+                is_last=True
+
             frappe.publish_realtime(
                 "bi_action",
                 {
@@ -757,6 +762,7 @@ class HDFCBankAPI(BankAPI):
                     "docname": self.data.docname,
                     "party_name":self.data.party_name,
                     "action": "payment_success_bulk",
+                    "is_last": is_last,
                 },
                 user=frappe.session.user,
                 doctype="Payment Entry",
@@ -778,7 +784,6 @@ class HDFCBankAPI(BankAPI):
                 self.make_payment()
                 return
             else:
-                self.show_msg("All Payments are completed")
                 frappe.publish_realtime(
                     "bi_action",
                     {
