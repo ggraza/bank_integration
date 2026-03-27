@@ -43,7 +43,6 @@ frappe.listview_settings["Payment Entry"] = {
                         <strong>Party's Name:</strong> ${data.party_name}<br>
                         <strong>Amount:</strong> ${fmt_money(data.paid_amount)}<br>
                         <strong>Payment Reference No.:</strong> ${data.ref_no}<br>
-                        <strong>Date:</strong> ${frappe.datetime.get_today()}<br>
                         <strong>Payment Proof:</strong> You can find the payment proof attached within this Payment Entry document.<br><br>
                         Proceeding to next payment...<br>`);
                     break;

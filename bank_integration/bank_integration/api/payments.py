@@ -80,6 +80,7 @@ def make_bulk_payment(docname_list, uid):
         data = frappe._dict(
             {
                 "from_account": payment_entry.paid_from,
+                "party_name": payment_entry.party_name,
                 "to_account": payment_entry.party_bank_ac_no,
                 "transfer_type": payment_entry.transfer_type,
                 "amount": payment_entry.paid_amount,

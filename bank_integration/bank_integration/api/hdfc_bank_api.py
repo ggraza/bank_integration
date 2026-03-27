@@ -755,6 +755,7 @@ class HDFCBankAPI(BankAPI):
                     "uid": self.uid,
                     "paid_amount": self.data.amount,
                     "docname": self.data.docname,
+                    "party_name":self.data.party_name,
                     "action": "payment_success_bulk",
                 },
                 user=frappe.session.user,
