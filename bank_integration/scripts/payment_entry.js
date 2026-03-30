@@ -99,11 +99,9 @@ frappe.ui.form.on("Payment Entry", {
         get_contact_data(frm);
 
         if (frm.doc.pay_now) {
-            // Set reference details
             frm.set_value("reference_no", "-");
             frm.set_value("reference_date", frappe.datetime.get_today());
 
-            // Set mandatory
             frm.toggle_reqd(
                 ["party_bank_ac_no", "payment_desc", "transfer_type"],
                 1,
@@ -123,20 +121,6 @@ frappe.ui.form.on("Payment Entry", {
 
     paid_amount: async function (frm) {
         await set_transfer_type(frm);
-        if (
-            frm.doc.paid_from_bank &&
-            frm.doc.party_bank &&
-            frm.doc.paid_amount < 200000 &&
-            frm.doc.transfer_type != "Transfer within the bank" &&
-            frm.doc.transfer_type != "Transfer to other bank (NEFT)" &&
-            frm.doc.transfer_type != "Transfer to other bank (IMPS)"
-        ) {
-            await frm.set_value(
-                "transfer_type",
-                "Transfer to other bank (NEFT)",
-            );
-            frm.refresh_field("transfer_type");
-        }
     },
 
     payment_desc: function (frm) {
@@ -418,25 +402,27 @@ function set_bank_name_and_ac(frm) {
 }
 
 async function set_transfer_type(frm) {
-    if(frm.doc.paid_from_bank && frm.doc.party_bank) {
-        if(frm.doc.paid_from_bank == frm.doc.party_bank){
-            frm.set_df_property("transfer_type","options",
-                ["Transfer within the bank"].join("\n"))
-            await frm.set_value('transfer_type', 'Transfer within the bank');
-        } else {
-            frm.set_df_property("transfer_type", "options", [
-            "Transfer to other bank (NEFT)",
-            "Transfer to other bank (IMPS)",
-            ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : [])
-            ].join("\n"));
-            if(frm.doc.transfer_type=="Transfer within the bank" || frm.doc.transfer_type==""){
-                await frm.set_value('transfer_type','Transfer to other bank (NEFT)');
-            }
-            frm.refresh_field("transfer_type");
-        }
-    } else {
-        reset_fields(frm, "transfer_type");
+    if (!frm.doc.paid_from_bank || !frm.doc.party_bank) {
+        return reset_fields(frm, "transfer_type");
     }
+
+    if (frm.doc.paid_from_bank === frm.doc.party_bank) {
+        frm.set_df_property("transfer_type", "options", "Transfer within the bank");
+        await frm.set_value("transfer_type", "Transfer within the bank");
+        return;
+    }
+
+    let options = [
+        "Transfer to other bank (NEFT)",
+        "Transfer to other bank (IMPS)",
+        ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : []),
+    ];
+    frm.set_df_property("transfer_type", "options", options.join("\n"));
+
+    if (!options.includes(frm.doc.transfer_type)) {
+        await frm.set_value("transfer_type", "Transfer to other bank (NEFT)");
+    }
+    frm.refresh_field("transfer_type");
 }
 
 function get_contact_data(frm) {
@@ -471,9 +457,8 @@ function get_contact_data(frm) {
     }
 }
 
-function reset_fields() {
-    var frm = arguments[0];
-    for (var i = 1; i < arguments.length; i++) {
-        frm.set_value(arguments[i], "");
+function reset_fields(frm, ...fields) {
+    for (let field of fields) {
+        frm.set_value(field, "");
     }
 }
