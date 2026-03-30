@@ -99,11 +99,9 @@ frappe.ui.form.on("Payment Entry", {
         get_contact_data(frm);
 
         if (frm.doc.pay_now) {
-            // Set reference details
             frm.set_value("reference_no", "-");
             frm.set_value("reference_date", frappe.datetime.get_today());
 
-            // Set mandatory
             frm.toggle_reqd(
                 ["party_bank_ac_no", "payment_desc", "transfer_type"],
                 1,
@@ -117,8 +115,12 @@ frappe.ui.form.on("Payment Entry", {
         }
     },
 
-    party_bank: function (frm) {
-        set_transfer_type(frm);
+    party_bank: async function (frm) {
+        await set_transfer_type(frm);
+    },
+
+    paid_amount: async function (frm) {
+        await set_transfer_type(frm);
     },
 
     payment_desc: function (frm) {
@@ -128,10 +130,12 @@ frappe.ui.form.on("Payment Entry", {
         );
     },
 
-    transfer_type: function (frm) {
-        if (frm.doc.transfer_type == "Transfer to other bank (NEFT)") {
-            frm.toggle_reqd("comm_type", 1);
-            frm.set_value("comm_type", "Email");
+    transfer_type: function(frm){
+        if (frm.doc.transfer_type && frm.doc.transfer_type.includes('Transfer to other bank')){
+            frm.toggle_reqd('comm_type', 1);
+            if(!frm.doc.comm_type){
+                frm.set_value('comm_type', 'Email');
+            }
         } else {
             frm.toggle_reqd("comm_type", 0);
             reset_fields(frm, "comm_type");
@@ -171,7 +175,7 @@ frappe.ui.form.on("Payment Entry", {
         }
     },
 
-    refresh: function (frm) {
+    refresh: async function (frm) {
         if (frm.doc.docstatus === 0) {
             frm.fields_dict.payment_desc.$input[0].maxLength = 20;
             frm.fields_dict.comm_mobile.$input[0].maxLength = 10;
@@ -179,6 +183,8 @@ frappe.ui.form.on("Payment Entry", {
 
         if (frm.doc.docstatus === 0 && !frm.doc.__unsaved) {
             if (frm.doc.pay_now && frm.doc.online_payment_status == "Unpaid") {
+
+                await set_transfer_type(frm);
 
                 frm.add_custom_button(__("Make Online Payment"), function () {
                     frappe.confirm(
@@ -331,46 +337,34 @@ function setup_sms(frm) {
             });
 
             d.show();
-        });
+        })
     }
 }
 
-function check_bank_integration(frm) {
-    if (frm.doc.payment_type == "Pay" && frm.doc.paid_from) {
-        frappe.db
-            .get_value("Bank Account", { account: frm.doc.paid_from }, [
-                "name",
-                "bank",
-            ])
-            .then((r) => {
-                if (r.message) {
-                    frm.set_value(
-                        "paid_from_bank",
-                        r.message.bank ? r.message.bank : "",
-                    );
-                    if (frm.doc.paid_from_bank) {
-                        set_transfer_type(frm);
-                    }
-
-                    frappe.db
-                        .get_value(
-                            "Bank Integration Settings",
-                            { name: r.message.name, disabled: false },
-                            "name",
-                        )
-                        .then((r) => {
-                            if (!r.message) {
-                                disable_pay_now(frm);
-                            } else {
-                                frm.get_docfield("pay_now").read_only = 0;
-                                frm.refresh_field("pay_now");
-                            }
-                        });
-                } else {
-                    reset_fields(frm, "paid_from_bank");
-                    disable_pay_now(frm);
+function check_bank_integration(frm){
+    if(frm.doc.payment_type == 'Pay' && frm.doc.paid_from) {
+        frappe.db.get_value('Bank Account', {'account': frm.doc.paid_from}, ['name', 'bank'])
+        .then(async (r) => {
+            if(r.message){
+                frm.set_value('paid_from_bank', r.message.bank ? r.message.bank : '');
+                if (frm.doc.paid_from_bank) {
+                    await set_transfer_type(frm);
                 }
-            });
+
+                frappe.db.get_value('Bank Integration Settings', {name: r.message.name, disabled: false}, 'name').then((r) => {
+                    if (!r.message) {
+                        disable_pay_now(frm);
+                    } else {
+                        frm.get_docfield('pay_now').read_only = 0;
+                        frm.refresh_field('pay_now');
+                    }
+                });
+
+            } else {
+                reset_fields(frm, 'paid_from_bank');
+                disable_pay_now(frm);
+            }
+        });
     }
 }
 
@@ -407,16 +401,28 @@ function set_bank_name_and_ac(frm) {
     }
 }
 
-function set_transfer_type(frm) {
-    if (frm.doc.paid_from_bank && frm.doc.party_bank) {
-        if (frm.doc.paid_from_bank == frm.doc.party_bank) {
-            frm.set_value("transfer_type", "Transfer within the bank");
-        } else {
-            frm.set_value("transfer_type", "Transfer to other bank (NEFT)");
-        }
-    } else {
-        reset_fields(frm, "transfer_type");
+async function set_transfer_type(frm) {
+    if (!frm.doc.paid_from_bank || !frm.doc.party_bank) {
+        return reset_fields(frm, "transfer_type");
     }
+
+    if (frm.doc.paid_from_bank === frm.doc.party_bank) {
+        frm.set_df_property("transfer_type", "options", "Transfer within the bank");
+        await frm.set_value("transfer_type", "Transfer within the bank");
+        return;
+    }
+
+    let options = [
+        "Transfer to other bank (NEFT)",
+        "Transfer to other bank (IMPS)",
+        ...(frm.doc.paid_amount >= 200000 ? ["Transfer to other bank (RTGS)"] : []),
+    ];
+    frm.set_df_property("transfer_type", "options", options.join("\n"));
+
+    if (!options.includes(frm.doc.transfer_type)) {
+        await frm.set_value("transfer_type", "Transfer to other bank (NEFT)");
+    }
+    frm.refresh_field("transfer_type");
 }
 
 function get_contact_data(frm) {
@@ -451,9 +457,8 @@ function get_contact_data(frm) {
     }
 }
 
-function reset_fields() {
-    var frm = arguments[0];
-    for (var i = 1; i < arguments.length; i++) {
-        frm.set_value(arguments[i], "");
+function reset_fields(frm, ...fields) {
+    for (let field of fields) {
+        frm.set_value(field, "");
     }
 }

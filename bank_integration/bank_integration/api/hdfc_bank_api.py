@@ -36,7 +36,7 @@ class HDFCBankAPI(BankAPI):
         cust_id.send_keys(self.username, Keys.ENTER)
 
         self.br.switch_to.default_content()
-        pass_input = self.get_element("password", "id", timeout=10,throw="ignore")
+        pass_input = self.get_element("password", "id", timeout=10, throw="ignore")
         if pass_input is None:
             self.throw(
                 "Credentials are incorrect. Please verify the username & password in Bank Integration Settings."
@@ -423,8 +423,10 @@ class HDFCBankAPI(BankAPI):
 
         if self.data.transfer_type == "Transfer within the bank":
             self.make_payment_within_bank()
-        elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-            self.make_neft_payment()
+        elif self.data.transfer_type and self.data.transfer_type.startswith(
+            "Transfer to other bank"
+        ):
+            self.make_inter_bank_payment()
 
     @set_correct_payment_data
     def _select_from_account_if_needed(self):
@@ -610,10 +612,40 @@ class HDFCBankAPI(BankAPI):
         self._handle_post_confirm_payment_state()
 
     @set_correct_payment_data
-    def make_neft_payment(self):
+    def make_inter_bank_payment(self):
+
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
         amt.send_keys("%.2f" % self.data.amount)
+
+        try:
+            match self.data.transfer_type:
+                case "Transfer to other bank (NEFT)":
+                    select_neft = self.get_element(
+                        "//div[contains(@class,'transfer-mode-')][.//label[normalize-space()='NEFT']]",
+                        "xpath",
+                    )
+                    select_neft.click()
+
+                case "Transfer to other bank (IMPS)":
+                    select_imps = self.get_element(
+                        "//div[contains(@class,'transfer-mode-')][.//label[normalize-space()='IMPS']]",
+                        "xpath",
+                    )
+                    select_imps.click()
+
+                case "Transfer to other bank (RTGS)":
+                    select_rtgs = self.get_element(
+                        "//div[contains(@class,'transfer-mode-')][.//label[normalize-space()='RTGS']]",
+                        "xpath",
+                    )
+                    select_rtgs.click()
+
+        except Exception:
+            self.throw(
+                "Unable to find the payment transfer type selection buttons. "
+                "The payment could not be completed, and the system logged out from the website."
+            )
 
         desc = self.get_element('input[data-role="input"]', "css_selector")
         desc.clear()
@@ -671,12 +703,7 @@ class HDFCBankAPI(BankAPI):
 
         try:
             self.br.switch_to.default_content()
-
-            if self.data.transfer_type == "Transfer within the bank":
-                self.get_element("span.success-tick", "css_selector", throw=False)
-
-            elif self.data.transfer_type == "Transfer to other bank (NEFT)":
-                self.get_element("span.success-tick", "css_selector", throw=False)
+            self.get_element("span.success-tick", "css_selector", throw=False)
 
         except TimeoutException:
             self.throw(
@@ -718,7 +745,7 @@ class HDFCBankAPI(BankAPI):
             try:
                 ref_no = (
                     self.get_element(
-                        '//div[contains(@class,"bb-support--subtitle") and contains(normalize-space(text()),"Reference")]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
+                        '//div[contains(@class,"bb-support--subtitle") and (contains(normalize-space(text()),"Reference") or contains(normalize-space(text()),"Transaction ID"))]/following-sibling::div[contains(@class,"bb-text-medium-bold")]',
                         "xpath",
                         throw=False,
                     ).text
@@ -749,9 +776,9 @@ class HDFCBankAPI(BankAPI):
             )
         else:
             if getattr(self, "bulk_payments", None):
-                is_last=False
+                is_last = False
             else:
-                is_last=True
+                is_last = True
 
             frappe.publish_realtime(
                 "bi_action",
@@ -760,7 +787,7 @@ class HDFCBankAPI(BankAPI):
                     "uid": self.uid,
                     "paid_amount": self.data.amount,
                     "docname": self.data.docname,
-                    "party_name":self.data.party_name,
+                    "party_name": self.data.party_name,
                     "action": "payment_success_bulk",
                     "is_last": is_last,
                 },
@@ -775,7 +802,7 @@ class HDFCBankAPI(BankAPI):
                     "//button[normalize-space(text())='Go to Send Money' and contains(@class, 'btn-primary')]",
                     "xpath",
                     now=True,
-                    throw="ignore"
+                    throw="ignore",
                 )
                 if send_money_btn:
                     self.br.execute_script("arguments[0].click();", send_money_btn)
