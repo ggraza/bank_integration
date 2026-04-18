@@ -74,6 +74,15 @@ class BankAPI:
 
         self.br = webdriver.Chrome(options=self.get_options())
 
+        version = self.br.capabilities.get("browserVersion") or self.br.capabilities.get("version", "131.0.0.0")
+        self.br.execute_cdp_cmd("Network.setUserAgentOverride", {
+            "userAgent": (
+                "Mozilla/5.0 (X11; Linux x86_64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                f"Chrome/{version} Safari/537.36"
+            )
+        })
+
         # Enable downloads for headless Chrome
         self.br.execute_cdp_cmd(
             "Page.setDownloadBehavior",
@@ -86,12 +95,6 @@ class BankAPI:
     def get_options(self):
         options = Options()
         options.add_argument("--window-size=990,1200")
-
-        options.add_argument(
-            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/121.0.0.0 Safari/537.36"
-        )
 
         if self.download_dir and os.path.isdir(self.download_dir):
             options.add_experimental_option(
