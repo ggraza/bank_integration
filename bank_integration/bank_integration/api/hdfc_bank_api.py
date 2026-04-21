@@ -31,8 +31,13 @@ class HDFCBankAPI(BankAPI):
         self.setup_browser()
         self.br.get("https://netbanking.hdfcbank.com/netbanking/")
 
-        self.switch_to_frame("login_page")
-        cust_id = self.get_element("fldLoginUserId")
+        self.br.switch_to.default_content()
+        try:
+            cust_id = self.get_element("username")
+        except TimeoutException:
+            self.throw(
+                "Not able to find username input field. The HDFC portal layout may have changed."
+            )
         cust_id.send_keys(self.username, Keys.ENTER)
 
         self.br.switch_to.default_content()
