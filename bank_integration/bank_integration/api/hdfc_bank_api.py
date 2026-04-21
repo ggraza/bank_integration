@@ -756,6 +756,8 @@ class HDFCBankAPI(BankAPI):
                 is_private=1,
             )
 
+        frappe.db.commit()
+
         ref_no = "-"
         if self.data.transfer_type == "Transfer within the bank":
             try:
@@ -787,9 +789,27 @@ class HDFCBankAPI(BankAPI):
         payment_entry_doc = frappe.get_doc("Payment Entry", self.data.docname)
         payment_entry_doc.online_payment_status = "Paid"
         payment_entry_doc.reference_no = ref_no
-        payment_entry_doc.submit()
-        frappe.db.commit()
-
+        try:
+            payment_entry_doc.submit()
+            frappe.db.commit()
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "Payment Entry submit failed after successful bank payment")
+            try:
+                frappe.db.set_value(
+                    "Payment Entry",
+                    self.data.docname,
+                    {"online_payment_status": "Paid", "reference_no": ref_no},
+                )
+                frappe.db.commit()
+            except Exception:
+                frappe.log_error(frappe.get_traceback(), "Could not update Payment Entry fields after submit failure")
+            self.throw(
+                "Payment was successful on the bank portal, but we encountered an error while updating the Payment Entry in ERPNext. "
+                "Please check {} and submit it manually if needed. Reference No: {}".format(
+                    self.data.docname, ref_no
+                )
+            )
+            
         # these are kept separate as one requires frm object which is not present in list view
         if not self.is_bulk_payments:
             frappe.publish_realtime(

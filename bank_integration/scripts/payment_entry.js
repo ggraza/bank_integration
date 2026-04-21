@@ -59,6 +59,8 @@ frappe.ui.form.on("Payment Entry", {
         
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);
+        console.log("jbvckjdbjfvbkjrennkjrenkjrenk")
+        frm.set_df_property("transfer_type", "options", "\nTransfer within the bank");
 
         $('input[data-fieldname="payment_desc"]').keypress(function (e) {
             var regex = new RegExp("^[a-zA-Z0-9 ]+$");
