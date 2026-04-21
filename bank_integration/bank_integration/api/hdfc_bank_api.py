@@ -31,8 +31,13 @@ class HDFCBankAPI(BankAPI):
         self.setup_browser()
         self.br.get("https://netbanking.hdfcbank.com/netbanking/")
 
-        self.switch_to_frame("login_page")
-        cust_id = self.get_element("fldLoginUserId")
+        self.br.switch_to.default_content()
+        try:
+            cust_id = self.get_element("username")
+        except TimeoutException:
+            self.throw(
+                "Not able to find username input field. The HDFC portal layout may have changed."
+            )
         cust_id.send_keys(self.username, Keys.ENTER)
 
         self.br.switch_to.default_content()
@@ -751,6 +756,8 @@ class HDFCBankAPI(BankAPI):
                 is_private=1,
             )
 
+        frappe.db.commit()
+
         ref_no = "-"
         if self.data.transfer_type == "Transfer within the bank":
             try:
@@ -782,8 +789,23 @@ class HDFCBankAPI(BankAPI):
         payment_entry_doc = frappe.get_doc("Payment Entry", self.data.docname)
         payment_entry_doc.online_payment_status = "Paid"
         payment_entry_doc.reference_no = ref_no
-        payment_entry_doc.submit()
-        frappe.db.commit()
+        try:
+            payment_entry_doc.submit()
+        except Exception:
+            frappe.db.rollback()
+            frappe.db.set_value(
+                "Payment Entry",
+                self.data.docname,
+                {"online_payment_status": "Paid", "reference_no": ref_no},
+            )
+            self.throw(
+                "Payment was successful on the bank portal, but we encountered an error while updating the Payment Entry in ERPNext. "
+                "Please check {} and submit it manually if needed. Reference No: {}".format(
+                    self.data.docname, ref_no
+                )
+            )
+        finally:
+            frappe.db.commit()
 
         # these are kept separate as one requires frm object which is not present in list view
         if not self.is_bulk_payments:

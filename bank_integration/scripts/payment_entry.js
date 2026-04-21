@@ -42,7 +42,7 @@ frappe.ui.form.on("Payment Entry", {
                                     Feel free to get in touch with us if you have any queries or concerns.<br><br>
                                     Thank you for doing business with us. We look forward to your continued patronage in the future.<br><br>`,
                                 });
-                                
+
                             } else {
                                 setup_sms(frm);
                                 if (frm.sms_link) frm.sms_link.click();
@@ -56,9 +56,10 @@ frappe.ui.form.on("Payment Entry", {
     },
 
     onload: function (frm) {
-        
+
         bi.listenForOtp(frm);
         bi.listenForQuestions(frm);
+        set_transfer_type(frm);
 
         $('input[data-fieldname="payment_desc"]').keypress(function (e) {
             var regex = new RegExp("^[a-zA-Z0-9 ]+$");
