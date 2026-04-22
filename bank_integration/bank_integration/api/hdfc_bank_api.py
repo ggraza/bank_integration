@@ -147,7 +147,6 @@ class HDFCBankAPI(BankAPI):
         self.handle_login_error()
 
     def process_otp(self):
-
         try:
             self.wait_until(
                 AnyEC(
@@ -370,6 +369,13 @@ class HDFCBankAPI(BankAPI):
             self.fetch_transactions()
 
     def logout(self):
+        if hasattr(frappe.local, "request") and self.logged_in:
+            frappe.local.request.after_response.add(self._logout)
+            return
+
+        self._logout()
+
+    def _logout(self):
         if self.logged_in:
             try:
                 logout_btn1 = self.br.find_element(
@@ -386,7 +392,7 @@ class HDFCBankAPI(BankAPI):
                 time.sleep(1)
             except Exception:
                 self.show_msg(
-                    "We were unable to complete the logout process on the bank website. Please manually log out from your online banking account to end the session safely."
+                    "We were unable to complete the logout process on the bank website. Please manually log out from other sessions when you login next time."
                 )
         self.delete_cache()
         self.cleanup_download_dir(delete_dir=True)
@@ -448,10 +454,8 @@ class HDFCBankAPI(BankAPI):
         are masked (e.g. "**** **** **26 18"), so we match using the last 4
         digits of self.data.from_account.
         """
-        time.sleep(1)
-
-        from_account_selectors = self.br.find_elements(
-            By.CSS_SELECTOR, 'ng-select[name="bb-custom-account-selector"]'
+        from_account_selectors = self.get_element(
+            'ng-select[name="bb-custom-account-selector"]', "css_selector", timeout=5
         )
 
         if not from_account_selectors:
@@ -619,7 +623,6 @@ class HDFCBankAPI(BankAPI):
 
     @set_correct_payment_data
     def make_inter_bank_payment(self):
-
         amt = self.get_element("transfer-amount-input", "id")
         amt.clear()
         amt.send_keys("%.2f" % self.data.amount)
@@ -745,7 +748,10 @@ class HDFCBankAPI(BankAPI):
                 )
                 pdf_saved = True
         except Exception:
-            frappe.log_error(frappe.get_traceback(), "PDF receipt download failed; falling back to screenshot")
+            frappe.log_error(
+                frappe.get_traceback(),
+                "PDF receipt download failed; falling back to screenshot",
+            )
 
         if not pdf_saved:
             save_file(
