@@ -454,14 +454,12 @@ class HDFCBankAPI(BankAPI):
         are masked (e.g. "**** **** **26 18"), so we match using the last 4
         digits of self.data.from_account.
         """
-        from_account_selectors = self.get_element(
+        from_account_select = self.get_element(
             'ng-select[name="bb-custom-account-selector"]', "css_selector", timeout=5
         )
 
-        if not from_account_selectors:
+        if not from_account_select:
             return
-
-        from_account_select = from_account_selectors[0]
 
         already_selected = from_account_select.find_elements(
             By.CSS_SELECTOR, "div.ng-value:not(.ng-placeholder)"
